@@ -1,3 +1,12 @@
 [submodule "vae-lagging-encoder"]
 	path = vae-lagging-encoder
 	url = https://github.com/tom-pelsmaeker/vae-lagging-encoder.git
+[submodule "s-vae-pytorch"]
+	path = s-vae-pytorch
+	url = https://github.com/tom-pelsmaeker/s-vae-pytorch.git
+[submodule "torch-two-sample"]
+	path = torch-two-sample
+	url = https://github.com/josipd/torch-two-sample.git
+[submodule "pyter"]
+	path = pyter
+	url = https://github.com/roy-ht/pyter.git
