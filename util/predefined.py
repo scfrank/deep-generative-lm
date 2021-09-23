@@ -103,6 +103,7 @@ def set_ptb_folders(opt):
 def compute_seq_len(opt):
     """Computes the sequence length for a given cut-off."""
     mean, std = get_stats(osp.join(opt.data_folder, opt.train_file), True)[:2]
+    print("seq len", mean, std)
     opt.seq_len = int(mean + opt.cut_off * std)
     opt.mean_len = mean
     opt.std_len = std

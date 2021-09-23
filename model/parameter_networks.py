@@ -103,8 +103,10 @@ class BowmanEncoder(nn.Module):
             x = self.drop(x, self.p, shape=shape)
 
         # Pack padded if sequences have variable lengths
+        # Error: 'lengths' argument should be a 1D CPU int64 tensor, but got 1D cuda:0 Long tensor
+        # https://github.com/pytorch/pytorch/issues/43227
         if x_len is not None:
-            x = pack_padded_sequence(x, x_len, batch_first=True)
+            x = pack_padded_sequence(x, x_len.cpu(), batch_first=True)
 
         # Pass through GRU, obtain final output, and reshape to [B x 2 * l_dim * h_dim]
         _, h_n = self.gru(x)

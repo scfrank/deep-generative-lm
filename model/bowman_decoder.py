@@ -169,7 +169,7 @@ class BowmanDecoder(GenerativeDecoder):
         shape = torch.Size(x.shape) if self.var_mask else torch.Size([x_in.shape[0], 1, self.x_dim])
         x = self.parameter_dropout_in(x, self.parameter_p, shape=shape)
         if x_len is not None:
-            x = pack_padded_sequence(x, x_len - 1, batch_first=True)
+            x = pack_padded_sequence(x, (x_len - 1).cpu(), batch_first=True)
         h, _ = self.decoder(x, h)
         if x_len is not None:
             h = pad_packed_sequence(h, batch_first=True, total_length=x_in.shape[1] - 1)[0]
