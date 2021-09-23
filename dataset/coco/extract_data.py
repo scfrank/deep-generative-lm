@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-Script that extracts the data from the Penn Treebank and converts it to indices.
+Script that extracts the data from the Coco Captions/Penn Treebank and converts it to indices.
 """
 from collections import Counter, defaultdict
 import pickle
