@@ -54,7 +54,7 @@ def convert_to_indices(files, max_vocab, replace, sos, eos, pad):
                         sids.append(str(word_to_idx[token]))
                     else:
                         sids.append(str(word_to_idx[replace]))
-                f.write("\n".join(sids))
+                f.write(" ".join(sids) + "\n")
 
 
     pickle.dump(idx_to_word, open("idx_to_word.pickle", 'wb'))
