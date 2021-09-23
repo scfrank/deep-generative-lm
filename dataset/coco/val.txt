@@ -1,0 +1,1 @@
+/home/stella.frank/vae/texar_vae/coco_data/coco.valid.txt
