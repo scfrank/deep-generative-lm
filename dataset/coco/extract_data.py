@@ -44,7 +44,8 @@ def convert_to_indices(files, max_vocab, replace, sos, eos, pad):
     idx_to_word[max_vocab] = pad
 
     for file, dataset in zip(files, sentences):
-        with open(file.split('.')[0] + ".indices", 'w', encoding='utf8') as f:
+        ## assumes "coco.train.txt" filenames -> train.indices
+        with open(file.split('.txt')[1] + ".indices", 'w', encoding='utf8') as f:
             # f.write("\n".join([" ".join([str(word_to_idx[token]) for token in sentence]) for sentence in dataset]))
             for sentence in dataset:
                 sids = []
@@ -53,6 +54,7 @@ def convert_to_indices(files, max_vocab, replace, sos, eos, pad):
                         sids.append(str(word_to_idx[token]))
                     else:
                         sids.append(str(word_to_idx[replace]))
+                f.write("\n".join(sids))
 
 
     pickle.dump(idx_to_word, open("idx_to_word.pickle", 'wb'))
@@ -85,7 +87,7 @@ def get_stats(file, ret=False):
 
 if __name__ == '__main__':
     opt = parse_arguments()[0]
-    in_files = ['train.txt', 'val.txt', 'test.txt']
+    in_files = ['coco.train.txt', 'coco.valid.txt'] #  'coco.test.txt']
     max_vocab = 30001 ## increased from 10000. Max in coco is 32321
 
     convert_to_indices(in_files, max_vocab, opt.unk_token, opt.sos_token, opt.eos_token, opt.pad_token)

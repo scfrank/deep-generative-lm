@@ -82,7 +82,11 @@ def predefined(opt):
 
 def set_ptb_folders(opt):
     """This function sets default paths given a ptb_type."""
-    if opt.ptb_type == "dyer":
+    if opt.ptb_type == "coco":
+        opt.data_folder = osp.join(toplevel_path, "dataset/coco")
+        opt.out_folder = osp.join(toplevel_path, "out/coco")
+        opt.v_dim = 30002
+    elif opt.ptb_type == "dyer":
         opt.data_folder = osp.join(toplevel_path, "dataset/penn_treebank_dyer")
         opt.out_folder = osp.join(toplevel_path, "out/penn_treebank_dyer")
         opt.v_dim = 25643
