@@ -18,5 +18,5 @@ def print_flags(opt):
     if opt.verbosity > 0:
         print("Settings:")
         for key, value in vars(opt).items():
-            print(key + ' : ' + str(value))
+            print(key + " : " + str(value))
         print("\n")

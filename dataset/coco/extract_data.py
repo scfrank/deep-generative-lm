@@ -10,7 +10,7 @@ import os.path as osp
 import numpy as np
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '../..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), "../.."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
@@ -26,13 +26,13 @@ def convert_to_indices(files, max_vocab, replace, sos, eos, pad):
     sentences = []
     for i, file in enumerate(files):
         sentences.append([])
-        with open(file, 'r', encoding='utf8') as f:
+        with open(file, "r", encoding="utf8") as f:
             sentences[i] = ["{} {} {}".format(sos, line, eos).split() for line in f]
             counter.update([token for sentence in sentences[i] for token in sentence])
 
     idx_to_word = {0: replace}
     # word_to_idx = defaultdict(lambda: 0)  # scf put unk in word_to_idx
-    word_to_idx  = {replace: 0}
+    word_to_idx = {replace: 0}
     num = 1
     for i, (token, _) in enumerate(counter.most_common(max_vocab)):
         if token is not replace:
@@ -45,7 +45,7 @@ def convert_to_indices(files, max_vocab, replace, sos, eos, pad):
 
     for file, dataset in zip(files, sentences):
         ## assumes "coco.train.txt" filenames -> train.indices
-        with open(file.split('.txt')[1] + ".indices", 'w', encoding='utf8') as f:
+        with open(file.split(".txt")[1] + ".indices", "w", encoding="utf8") as f:
             # f.write("\n".join([" ".join([str(word_to_idx[token]) for token in sentence]) for sentence in dataset]))
             for sentence in dataset:
                 sids = []
@@ -56,16 +56,15 @@ def convert_to_indices(files, max_vocab, replace, sos, eos, pad):
                         sids.append(str(word_to_idx[replace]))
                 f.write(" ".join(sids) + "\n")
 
-
-    pickle.dump(idx_to_word, open("idx_to_word.pickle", 'wb'))
-    pickle.dump(dict(word_to_idx), open("word_to_idx.pickle", 'wb'))
+    pickle.dump(idx_to_word, open("idx_to_word.pickle", "wb"))
+    pickle.dump(dict(word_to_idx), open("word_to_idx.pickle", "wb"))
 
     print("Number of unique tokens: {}".format(len(counter)))
     print("Vocab size: {}".format(len(idx_to_word)))
 
 
 def get_stats(file, ret=False):
-    with open(file, 'r', encoding='utf8') as f:
+    with open(file, "r", encoding="utf8") as f:
         lengths = np.array([len(line.split()) for line in f])
 
     mean = lengths.mean()
@@ -81,13 +80,18 @@ def get_stats(file, ret=False):
     if ret:
         return mean, std, max, cutoff, pct_outliers
     else:
-        print("{}| mean: {}, std: {}, max: {}, min: {}, pct outliers: {}".format(
-            file, mean, std, max, min, pct_outliers))
+        print(
+            "{}| mean: {}, std: {}, max: {}, min: {}, pct outliers: {}".format(
+                file, mean, std, max, min, pct_outliers
+            )
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     opt = parse_arguments()[0]
-    in_files = ['coco.train.txt', 'coco.valid.txt'] #  'coco.test.txt']
-    max_vocab = 30001 ## increased from 10000. Max in coco is 32321
+    in_files = ["coco.train.txt", "coco.valid.txt"]  #  'coco.test.txt']
+    max_vocab = 30001  ## increased from 10000. Max in coco is 32321
 
-    convert_to_indices(in_files, max_vocab, opt.unk_token, opt.sos_token, opt.eos_token, opt.pad_token)
+    convert_to_indices(
+        in_files, max_vocab, opt.unk_token, opt.sos_token, opt.eos_token, opt.pad_token
+    )

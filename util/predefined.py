@@ -3,7 +3,7 @@ import os.path as osp
 import sys
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
@@ -19,25 +19,35 @@ def predefined(opt):
     Runs some checks over the settings to ensure that they don't clash, and sets predefined architectural setting.
     """
     # Enable warnings
-    simplefilter('default')
-    simplefilter('ignore', ResourceWarning)
+    simplefilter("default")
+    simplefilter("ignore", ResourceWarning)
 
     # When a legitimate cut_off is provided, we calculate the seq_len from dataset statistics and the
     # cut_off std provided.
     if opt.cut_off > 0.0:
-        warn("The cut_off setting overrides seq_len. Sequence length is now determined by standard deviations.")
+        warn(
+            "The cut_off setting overrides seq_len. Sequence length is now determined by standard deviations."
+        )
         opt = compute_seq_len(opt)
 
     if opt.tie_in_out == 1:
-        warn("Cannot use sparse Embeddings when tying the input and output layer. Using dense embeddings instead.")
+        warn(
+            "Cannot use sparse Embeddings when tying the input and output layer. Using dense embeddings instead."
+        )
         opt.sparse = 0
-        warn("h_dim and x_dim need to match when tying the input and output layer. Setting x_dim to h_dim.")
+        warn(
+            "h_dim and x_dim need to match when tying the input and output layer. Setting x_dim to h_dim."
+        )
         opt.x_dim = opt.h_dim
 
     # When a penn treebank Preprocessing type is specified we select the correct data and out folders
     if opt.ptb_type:
-        warn("Paths to data and out folder and v_dim are automatically set given the selected ptb_type: {}. \
-             User requested paths are ignored. To change this behavior, don't set any ptb_type.".format(opt.ptb_type))
+        warn(
+            "Paths to data and out folder and v_dim are automatically set given the selected ptb_type: {}. \
+             User requested paths are ignored. To change this behavior, don't set any ptb_type.".format(
+                opt.ptb_type
+            )
+        )
         opt = set_ptb_folders(opt)
 
     # Multiple modes are joined into a single string
@@ -48,8 +58,10 @@ def predefined(opt):
     if not opt.pre_def:
         return opt
     else:
-        warn("Predefined settings are used. Some user requested settings may be ignored. To change this behavior, \
-             set --pre_def=0 (the default).")
+        warn(
+            "Predefined settings are used. Some user requested settings may be ignored. To change this behavior, \
+             set --pre_def=0 (the default)."
+        )
 
     # Personal preferences across all models
     opt.verbosity = 1  # We like to see some info
@@ -96,7 +108,9 @@ def set_ptb_folders(opt):
         # opt.v_dim = 10002
         opt.v_dim = 25643
     else:
-        raise UnknownArgumentError("Unknown ptb_type {}. Please choose [mik, dyer]".format(opt.ptb_type))
+        raise UnknownArgumentError(
+            "Unknown ptb_type {}. Please choose [mik, dyer]".format(opt.ptb_type)
+        )
     return opt
 
 

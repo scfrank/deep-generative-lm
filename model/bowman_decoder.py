@@ -20,7 +20,7 @@ from torch.distributions import Normal, Categorical
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
@@ -49,19 +49,96 @@ class BowmanDecoder(GenerativeDecoder):
         z_dim(int): size of the latent variable.
     """
 
-    def __init__(self, device, seq_len, kl_step, word_p, word_p_enc, parameter_p, encoder_p, drop_type, min_rate,
-                 unk_index, css, sparse, N, rnn_type, tie_in_out, beta, lamb, mmd, ann_mode, rate_mode, posterior,
-                 hinge_weight, k, ann_word, word_step, v_dim, x_dim, h_dim, z_dim, s_dim, l_dim, h_dim_enc, l_dim_enc,
-                 lagrangian, constraint, max_mmd, max_elbo, alpha):
-        super(BowmanDecoder, self).__init__(device, seq_len, word_p, word_p_enc, parameter_p, encoder_p, drop_type,
-                                            min_rate, unk_index, css, N, rnn_type, kl_step, beta, lamb, mmd, ann_mode,
-                                            rate_mode, posterior, hinge_weight, ann_word, word_step, v_dim, x_dim,
-                                            h_dim, s_dim, z_dim, l_dim, h_dim_enc, l_dim_enc, lagrangian, constraint,
-                                            max_mmd, max_elbo, alpha)
+    def __init__(
+        self,
+        device,
+        seq_len,
+        kl_step,
+        word_p,
+        word_p_enc,
+        parameter_p,
+        encoder_p,
+        drop_type,
+        min_rate,
+        unk_index,
+        css,
+        sparse,
+        N,
+        rnn_type,
+        tie_in_out,
+        beta,
+        lamb,
+        mmd,
+        ann_mode,
+        rate_mode,
+        posterior,
+        hinge_weight,
+        k,
+        ann_word,
+        word_step,
+        v_dim,
+        x_dim,
+        h_dim,
+        z_dim,
+        s_dim,
+        l_dim,
+        h_dim_enc,
+        l_dim_enc,
+        lagrangian,
+        constraint,
+        max_mmd,
+        max_elbo,
+        alpha,
+    ):
+        super(BowmanDecoder, self).__init__(
+            device,
+            seq_len,
+            word_p,
+            word_p_enc,
+            parameter_p,
+            encoder_p,
+            drop_type,
+            min_rate,
+            unk_index,
+            css,
+            N,
+            rnn_type,
+            kl_step,
+            beta,
+            lamb,
+            mmd,
+            ann_mode,
+            rate_mode,
+            posterior,
+            hinge_weight,
+            ann_word,
+            word_step,
+            v_dim,
+            x_dim,
+            h_dim,
+            s_dim,
+            z_dim,
+            l_dim,
+            h_dim_enc,
+            l_dim_enc,
+            lagrangian,
+            constraint,
+            max_mmd,
+            max_elbo,
+            alpha,
+        )
 
         # The inference model, that is, the model that encodes data into an approximation of latent distribution
-        self.encoder = BowmanEncoder(x_dim, h_dim_enc, z_dim, l_dim_enc,
-                                     self.encoder_p, self.var_mask, self.posterior, k)
+        self.encoder = BowmanEncoder(
+            x_dim,
+            h_dim_enc,
+            z_dim,
+            l_dim_enc,
+            self.encoder_p,
+            self.var_mask,
+            self.posterior,
+            k,
+        )
 
         # The generative model, that is, the model that decodes from the latent space to data, or generates novel data.
         self.emb = nn.Embedding(v_dim, x_dim, sparse=bool(sparse))
@@ -72,7 +149,9 @@ class BowmanDecoder(GenerativeDecoder):
         # Tying weights in the input and output layer might increase performance (Inan et al., 2016)
         if tie_in_out:
             if self.h_dim != self.x_dim:
-                raise InvalidArgumentError("h_dim should match x_dim when tying weights.")
+                raise InvalidArgumentError(
+                    "h_dim should match x_dim when tying weights."
+                )
             self.linear.weight = self.emb.weight
 
     def forward(self, data, log_likelihood=False, extensive=False):
@@ -91,13 +170,16 @@ class BowmanDecoder(GenerativeDecoder):
         x_in, x_len, x_mask = self._unpack_data(data, 3)
         z, z_prior, mu, var = self._encode(x_in, x_len, log_likelihood)
         scores, pred = self._decode(x_in, x_len, z, mu, log_likelihood)
-        losses = self._compute_losses(x_in, x_mask, scores, z, z_prior, mu, var, log_likelihood)
+        losses = self._compute_losses(
+            x_in, x_mask, scores, z, z_prior, mu, var, log_likelihood
+        )
         self._update_scale(torch.mean(losses["KL"]) / self.scale.item())
         self._update_word_p()
 
         if extensive:
-            log_q_z_x = self._sample_log_likelihood(z, torch.tensor(
-                [1.], device=self.device), 1, mu, var).unsqueeze(0)
+            log_q_z_x = self._sample_log_likelihood(
+                z, torch.tensor([1.0], device=self.device), 1, mu, var
+            ).unsqueeze(0)
             log_p_z = self._prior_log_likelihood(z)
 
             return losses, pred, var, mu, z, z_prior, log_q_z_x, log_p_z
@@ -106,15 +188,15 @@ class BowmanDecoder(GenerativeDecoder):
 
     def _encode(self, x_in, x_len, log_likelihood):
         """Encodes the input data into Gaussian parameters and samples a latent representation."""
-        if (self.mmd or 'mmd' in self.constraint) and not log_likelihood:
+        if (self.mmd or "mmd" in self.constraint) and not log_likelihood:
             z_prior, _, _ = self._sample_from_prior(x_in.shape[0])
         else:
-            z_prior = x_in.new_tensor([[1., 1.]])
+            z_prior = x_in.new_tensor([[1.0, 1.0]])
 
         if self.use_prior:
             z, mu, var = self._sample_from_prior(x_in.shape[0])
             if self.posterior == "vmf":
-                mu[:, 0] = 1.
+                mu[:, 0] = 1.0
         else:
             self.word_dropout.sample_mask(self.word_p_enc, x_in.shape)
             x_dropped = x_in.clone()
@@ -157,7 +239,9 @@ class BowmanDecoder(GenerativeDecoder):
             pred = torch.max(scores.detach(), dim=2)[1] if not log_likelihood else None
         else:
             scores = self._compute_scores(x, x_len, x_in, z)
-            pred = torch.max(self._compute_scores(x, x_len, x_in, mu).detach(), dim=2)[1]
+            pred = torch.max(self._compute_scores(x, x_len, x_in, mu).detach(), dim=2)[
+                1
+            ]
 
         return scores, pred
 
@@ -166,22 +250,34 @@ class BowmanDecoder(GenerativeDecoder):
         h = self.ztohidden(z)
         h = torch.stack(torch.chunk(h, self.l_dim, 1))
 
-        shape = torch.Size(x.shape) if self.var_mask else torch.Size([x_in.shape[0], 1, self.x_dim])
+        shape = (
+            torch.Size(x.shape)
+            if self.var_mask
+            else torch.Size([x_in.shape[0], 1, self.x_dim])
+        )
         x = self.parameter_dropout_in(x, self.parameter_p, shape=shape)
         if x_len is not None:
             x = pack_padded_sequence(x, x_len - 1, batch_first=True)
         h, _ = self.decoder(x, h)
         if x_len is not None:
-            h = pad_packed_sequence(h, batch_first=True, total_length=x_in.shape[1] - 1)[0]
-        shape = torch.Size(h.shape) if self.var_mask else torch.Size([x_in.shape[0], 1, self.h_dim])
+            h = pad_packed_sequence(
+                h, batch_first=True, total_length=x_in.shape[1] - 1
+            )[0]
+        shape = (
+            torch.Size(h.shape)
+            if self.var_mask
+            else torch.Size([x_in.shape[0], 1, self.h_dim])
+        )
         h = self.parameter_dropout_out(h, self.parameter_p, shape=shape)
         scores = self.linear(h)
 
         return scores
 
-    def _compute_losses(self, x_in, x_mask, scores, z, z_prior, mu, var, log_likelihood):
+    def _compute_losses(
+        self, x_in, x_mask, scores, z, z_prior, mu, var, log_likelihood
+    ):
         """Computes the various VAE losses given scores and latent variables."""
-        losses = defaultdict(lambda: torch.tensor(0., device=self.device))
+        losses = defaultdict(lambda: torch.tensor(0.0, device=self.device))
         self._compute_rec_loss(scores, x_in, x_mask, log_likelihood, losses)
         if not self.use_prior:
             self._compute_reg_loss(z, mu, var, log_likelihood, losses)
@@ -191,33 +287,50 @@ class BowmanDecoder(GenerativeDecoder):
     def _compute_rec_loss(self, scores, x_in, x_mask, log_likelihood, losses):
         """Compute the reconstruction term in the loss"""
         if self.css and self.training:
-            losses["NLL"] = torch.mean(self._css(scores, x_in[:, 1:]) * x_mask[:, 1:], 0).sum()
+            losses["NLL"] = torch.mean(
+                self._css(scores, x_in[:, 1:]) * x_mask[:, 1:], 0
+            ).sum()
         else:
             if log_likelihood:
                 # We return the non-mean NLL when we want to estimate the likelihood
-                losses["NLL"] = torch.sum(self.reconstruction_loss(scores.contiguous().view(
-                    [-1, scores.shape[2]]), x_in[:, 1:].contiguous().view([-1])).view(scores.shape[0], scores.shape[1])
-                    * x_mask[:, 1:], 1)
+                losses["NLL"] = torch.sum(
+                    self.reconstruction_loss(
+                        scores.contiguous().view([-1, scores.shape[2]]),
+                        x_in[:, 1:].contiguous().view([-1]),
+                    ).view(scores.shape[0], scores.shape[1])
+                    * x_mask[:, 1:],
+                    1,
+                )
             else:
-                losses["NLL"] = torch.mean(self.reconstruction_loss(scores.contiguous().view(
-                    [-1, scores.shape[2]]), x_in[:, 1:].contiguous().view([-1])).view(scores.shape[0], scores.shape[1])
-                    * x_mask[:, 1:], 0).sum()
+                losses["NLL"] = torch.mean(
+                    self.reconstruction_loss(
+                        scores.contiguous().view([-1, scores.shape[2]]),
+                        x_in[:, 1:].contiguous().view([-1]),
+                    ).view(scores.shape[0], scores.shape[1])
+                    * x_mask[:, 1:],
+                    0,
+                ).sum()
 
     def _compute_reg_loss(self, z, mu, var, log_likelihood, losses):
         """Compute the regularization term in the loss."""
         if log_likelihood:
             # When we use a multisample estimate of the ELBO we lose access to the analytical KL
-            losses["KL"] = self._sample_log_likelihood(z, torch.tensor(
-                [1.], device=self.device), 1, mu, var) - self._prior_log_likelihood(z)
+            losses["KL"] = self._sample_log_likelihood(
+                z, torch.tensor([1.0], device=self.device), 1, mu, var
+            ) - self._prior_log_likelihood(z)
         else:
-            losses["KL"] = torch.mean(self.scale.item() * self._kl_divergence(mu, var,
-                                                                              None, None,
-                                                                              torch.tensor([1.],
-                                                                                           device=self.device), 1))
+            losses["KL"] = torch.mean(
+                self.scale.item()
+                * self._kl_divergence(
+                    mu, var, None, None, torch.tensor([1.0], device=self.device), 1
+                )
+            )
 
     def _prior_log_likelihood(self, z):
         """Evaluate the log-likelihood of a sample given the prior."""
-        return self._sample_log_likelihood(z, torch.tensor([1.], device=self.device), 1)
+        return self._sample_log_likelihood(
+            z, torch.tensor([1.0], device=self.device), 1
+        )
 
     def _compute_aux_loss(self, z, z_prior, log_likelihood, losses):
         """Compute auxiliary parts of the loss."""
@@ -225,7 +338,7 @@ class BowmanDecoder(GenerativeDecoder):
             # The lagrangian flag determines whether we apply Lagrangian relaxation to constraints
             if self.lagrangian:
                 # We compute the mmd if necessary for the constraint
-                if 'mmd' in self.constraint:
+                if "mmd" in self.constraint:
                     mmd = self._mmd(z, z_prior)
                 else:
                     mmd = None
@@ -236,16 +349,20 @@ class BowmanDecoder(GenerativeDecoder):
 
             # These are constraints with pre-set weights, invoked when self.lagrangian is False
             else:
-                losses["Hinge"] = self._hinge_loss(losses["KL"] / self.scale.item(), self.min_rate)
+                losses["Hinge"] = self._hinge_loss(
+                    losses["KL"] / self.scale.item(), self.min_rate
+                )
                 if self.rate_mode == "fb" and self.training:
                     losses["KL"] = losses["Hinge"]
-                    losses["Hinge"] = torch.tensor(0., device=self.device)
+                    losses["Hinge"] = torch.tensor(0.0, device=self.device)
                 if self.mmd:
                     losses["MMD"] = (self.alpha + self.lamb - 1) * self._mmd(z, z_prior)
 
             losses["L2"] = self._l2_regularization()
 
-    def sample_sequences(self, x_i, seq_len, eos_token, pad_token, sample_softmax=False):
+    def sample_sequences(
+        self, x_i, seq_len, eos_token, pad_token, sample_softmax=False
+    ):
         """Samples sequences from the (learned) decoder given a prefix of tokens.
 
         Args:
@@ -270,8 +387,17 @@ class BowmanDecoder(GenerativeDecoder):
 
         return self._pad_samples(samples, eos_token, pad_token)
 
-    def sample_posterior(self, seq, num, eos_token, pad_token, x_i=None, mode="teacher", seq_len=None,
-                         sample_softmax=False):
+    def sample_posterior(
+        self,
+        seq,
+        num,
+        eos_token,
+        pad_token,
+        x_i=None,
+        mode="teacher",
+        seq_len=None,
+        sample_softmax=False,
+    ):
         """Guided posterior sampling."""
         if seq_len is None:
             self.seq_len = seq.shape[1] + 5
@@ -290,7 +416,17 @@ class BowmanDecoder(GenerativeDecoder):
 
         return self._pad_samples(samples, eos_token, pad_token)
 
-    def homotopies(self, seq_1, seq_2, num, x_i, eos_token, pad_token, seq_len=None, sample_softmax=False):
+    def homotopies(
+        self,
+        seq_1,
+        seq_2,
+        num,
+        x_i,
+        eos_token,
+        pad_token,
+        seq_len=None,
+        sample_softmax=False,
+    ):
         """Computes num homotopies between two sequences."""
         if seq_len is None:
             self.seq_len = max(seq_1.shape[1], seq_2.shape[1]) + 5
@@ -299,11 +435,17 @@ class BowmanDecoder(GenerativeDecoder):
 
         with torch.no_grad():
             # Embed sequences
-            z_1 = self._sample_from_posterior(seq_1, seq_1.new_tensor([seq_1.shape[1]]), False)[0]
-            z_2 = self._sample_from_posterior(seq_2, seq_2.new_tensor([seq_2.shape[1]]), False)[0]
+            z_1 = self._sample_from_posterior(
+                seq_1, seq_1.new_tensor([seq_1.shape[1]]), False
+            )[0]
+            z_2 = self._sample_from_posterior(
+                seq_2, seq_2.new_tensor([seq_2.shape[1]]), False
+            )[0]
 
             # Get in-between z using linear homeotopy
-            z = torch.cat([(1. - i / num) * z_1 + i / num * z_2 for i in range(num + 1)], 0)
+            z = torch.cat(
+                [(1.0 - i / num) * z_1 + i / num * z_2 for i in range(num + 1)], 0
+            )
             samples = self._sample_from_z(x_i, z, sample_softmax)
 
         return self._pad_samples(samples, eos_token, pad_token)
@@ -316,7 +458,7 @@ class BowmanDecoder(GenerativeDecoder):
         for spot in eos_spot:
             if spot[0] != prev_row:
                 try:
-                    samples[spot[0], spot[1]+1:] = pad_token
+                    samples[spot[0], spot[1] + 1 :] = pad_token
                 except IndexError:
                     pass
             else:
@@ -353,7 +495,7 @@ class BowmanDecoder(GenerativeDecoder):
 
     def _l2_regularization(self):
         """Computes the l2 regularization term according to the Gal dropout paper with t=1."""
-        l2_loss = torch.tensor(0., device=self.device)
+        l2_loss = torch.tensor(0.0, device=self.device)
         if self.training:
             for parameter in self.named_parameters():
                 if "emb" in parameter[0]:
@@ -363,44 +505,137 @@ class BowmanDecoder(GenerativeDecoder):
                 if "encoder" in parameter[0]:
                     if "bias" in parameter[0]:
                         # We assume a Gaussian prior with unit variance around the bias values (Gal, 2016)
-                        l2_loss += 1. / (2 * self.N) * (parameter[1] ** 2).sum()
+                        l2_loss += 1.0 / (2 * self.N) * (parameter[1] ** 2).sum()
                     elif "hh" in parameter[0]:
                         # For non-dropped weights we also assume a Gaussian prior with unit variance
                         if self.drop_type == "recurrent":
-                            l2_loss += (1. - self.encoder_p) / (2 * self.N) * (parameter[1] ** 2).sum()
+                            l2_loss += (
+                                (1.0 - self.encoder_p)
+                                / (2 * self.N)
+                                * (parameter[1] ** 2).sum()
+                            )
                         else:
-                            l2_loss += 1. / (2 * self.N) * (parameter[1] ** 2).sum()
+                            l2_loss += 1.0 / (2 * self.N) * (parameter[1] ** 2).sum()
                     else:
-                        l2_loss += (1. - self.encoder_p) / (2 * self.N) * (parameter[1] ** 2).sum()
+                        l2_loss += (
+                            (1.0 - self.encoder_p)
+                            / (2 * self.N)
+                            * (parameter[1] ** 2).sum()
+                        )
                 else:
                     if "bias" in parameter[0]:
                         # We assume a Gaussian prior with unit variance around the bias values (Gal, 2016)
-                        l2_loss += 1. / (2 * self.N) * (parameter[1] ** 2).sum()
+                        l2_loss += 1.0 / (2 * self.N) * (parameter[1] ** 2).sum()
                     elif "hh" in parameter[0]:
                         # For non-dropped weights we also assume a Gaussian prior with unit variance
                         if self.drop_type == "recurrent":
-                            l2_loss += (1. - self.parameter_p) / (2 * self.N) * (parameter[1] ** 2).sum()
+                            l2_loss += (
+                                (1.0 - self.parameter_p)
+                                / (2 * self.N)
+                                * (parameter[1] ** 2).sum()
+                            )
                         else:
-                            l2_loss += 1. / (2 * self.N) * (parameter[1] ** 2).sum()
+                            l2_loss += 1.0 / (2 * self.N) * (parameter[1] ** 2).sum()
                     else:
                         # For dropped weights we have to scale the regularization because of Bernoulli prior (Gal, 2016)
-                        l2_loss += (1. - self.parameter_p) / (2 * self.N) * (parameter[1] ** 2).sum()
+                        l2_loss += (
+                            (1.0 - self.parameter_p)
+                            / (2 * self.N)
+                            * (parameter[1] ** 2).sum()
+                        )
         return l2_loss
 
 
 class FlowBowmanDecoder(BowmanDecoder):
-
-    def __init__(self, device, seq_len, kl_step, word_p, word_p_enc, parameter_p, encoder_p, drop_type, min_rate,
-                 unk_index, css, sparse, N, rnn_type, tie_in_out, beta, lamb, mmd, ann_mode, rate_mode, posterior,
-                 hinge_weight, k, ann_word, word_step, flow, flow_depth, hidden_depth, prior, num_weights, mean_len,
-                 std_len, v_dim, x_dim, h_dim, z_dim, s_dim, l_dim, h_dim_enc, l_dim_enc, c_dim, lagrangian, constraint,
-                 max_mmd, max_elbo, alpha):
-        super(FlowBowmanDecoder, self).__init__(device, seq_len, kl_step, word_p, word_p_enc, parameter_p, encoder_p,
-                                                drop_type, min_rate, unk_index, css, sparse, N, rnn_type, tie_in_out,
-                                                beta, lamb, mmd, ann_mode, rate_mode, posterior, hinge_weight, k,
-                                                ann_word, word_step, v_dim, x_dim, h_dim, z_dim, s_dim, l_dim,
-                                                h_dim_enc, l_dim_enc, lagrangian, constraint, max_mmd, max_elbo,
-                                                alpha)
+    def __init__(
+        self,
+        device,
+        seq_len,
+        kl_step,
+        word_p,
+        word_p_enc,
+        parameter_p,
+        encoder_p,
+        drop_type,
+        min_rate,
+        unk_index,
+        css,
+        sparse,
+        N,
+        rnn_type,
+        tie_in_out,
+        beta,
+        lamb,
+        mmd,
+        ann_mode,
+        rate_mode,
+        posterior,
+        hinge_weight,
+        k,
+        ann_word,
+        word_step,
+        flow,
+        flow_depth,
+        hidden_depth,
+        prior,
+        num_weights,
+        mean_len,
+        std_len,
+        v_dim,
+        x_dim,
+        h_dim,
+        z_dim,
+        s_dim,
+        l_dim,
+        h_dim_enc,
+        l_dim_enc,
+        c_dim,
+        lagrangian,
+        constraint,
+        max_mmd,
+        max_elbo,
+        alpha,
+    ):
+        super(FlowBowmanDecoder, self).__init__(
+            device,
+            seq_len,
+            kl_step,
+            word_p,
+            word_p_enc,
+            parameter_p,
+            encoder_p,
+            drop_type,
+            min_rate,
+            unk_index,
+            css,
+            sparse,
+            N,
+            rnn_type,
+            tie_in_out,
+            beta,
+            lamb,
+            mmd,
+            ann_mode,
+            rate_mode,
+            posterior,
+            hinge_weight,
+            k,
+            ann_word,
+            word_step,
+            v_dim,
+            x_dim,
+            h_dim,
+            z_dim,
+            s_dim,
+            l_dim,
+            h_dim_enc,
+            l_dim_enc,
+            lagrangian,
+            constraint,
+            max_mmd,
+            max_elbo,
+            alpha,
+        )
 
         if flow == "diag":
             self.flow = Diag()
@@ -408,11 +643,14 @@ class FlowBowmanDecoder(BowmanDecoder):
             self.flow = IAF(c_dim, z_dim, flow_depth, hidden_depth)
         elif flow == "vpiaf":
             self.flow = IAF(c_dim, z_dim, flow_depth, hidden_depth, scale=False)
-        elif flow == 'planar':
+        elif flow == "planar":
             self.flow = Planar(h_dim_enc * 2, z_dim, hidden_depth)
         else:
             raise UnknownArgumentError(
-                "Flow type not recognized: {}. Please choose [diag, iaf, vpiaf, planar]".format(flow))
+                "Flow type not recognized: {}. Please choose [diag, iaf, vpiaf, planar]".format(
+                    flow
+                )
+            )
 
         if prior in ["mog", "vamp", "weak"]:
             self.prior = prior
@@ -421,7 +659,7 @@ class FlowBowmanDecoder(BowmanDecoder):
 
         if self.prior == "mog":
             # Create learnable mixture parameters with fixed weights and initialize
-            mixture_weights = torch.Tensor(num_weights).fill_(1./num_weights)
+            mixture_weights = torch.Tensor(num_weights).fill_(1.0 / num_weights)
             self.register_buffer("mixture_weights", mixture_weights)
             self.mixture_mu = Parameter(torch.Tensor(num_weights, self.z_dim))
             if self.posterior == "vmf":
@@ -432,7 +670,7 @@ class FlowBowmanDecoder(BowmanDecoder):
             xavier_normal_(self.mixture_mu)
         elif self.prior == "vamp":
             # Create learnable pseudoinputs with fixed weights and initialize
-            pseudo_weights = torch.Tensor(num_weights).fill_(1./num_weights)
+            pseudo_weights = torch.Tensor(num_weights).fill_(1.0 / num_weights)
             self.register_buffer("pseudo_weights", pseudo_weights)
             self.pseudo_inputs = Parameter(torch.Tensor(num_weights, seq_len, x_dim))
             xavier_normal_(self.pseudo_inputs)
@@ -444,7 +682,7 @@ class FlowBowmanDecoder(BowmanDecoder):
             self.register_buffer("pseudo_lengths", lengths)
 
         # layer to context
-        if 'iaf' in flow:
+        if "iaf" in flow:
             self.h_to_context = nn.Linear(h_dim_enc * l_dim_enc * 2, c_dim)
         else:
             self.h_to_context = nn.Sequential()
@@ -463,15 +701,23 @@ class FlowBowmanDecoder(BowmanDecoder):
             pred(torch.LongTensor): most probable sequences given the data, as predicted by the model.
         """
         x_in, x_len, x_mask = self._unpack_data(data, 3)
-        z_0, z, z_prior, z_mu, mu, var, logdet = self._encode(x_in, x_len, log_likelihood)
+        z_0, z, z_prior, z_mu, mu, var, logdet = self._encode(
+            x_in, x_len, log_likelihood
+        )
         scores, pred = self._decode(x_in, x_len, z, z_mu, log_likelihood)
-        losses = self._compute_losses(x_in, x_mask, scores, z_0, z, z_prior, mu, var, logdet, log_likelihood)
+        losses = self._compute_losses(
+            x_in, x_mask, scores, z_0, z, z_prior, mu, var, logdet, log_likelihood
+        )
         self._update_scale(torch.mean(losses["KL"]) / self.scale.item())
         self._update_word_p()
 
         if extensive:
-            log_q_z_x = self._sample_log_likelihood(z, torch.tensor(
-                [1.], device=self.device), 1, mu, var).unsqueeze(0) - logdet
+            log_q_z_x = (
+                self._sample_log_likelihood(
+                    z, torch.tensor([1.0], device=self.device), 1, mu, var
+                ).unsqueeze(0)
+                - logdet
+            )
             log_p_z = self._prior_log_likelihood(z)
 
             return losses, pred, var, mu, z, z_prior, log_q_z_x, log_p_z
@@ -483,7 +729,7 @@ class FlowBowmanDecoder(BowmanDecoder):
         if self.mmd:
             z_prior, _, _ = self._sample_from_prior(x_in.shape[0])
         else:
-            z_prior = x_in.new_tensor([[1.]])
+            z_prior = x_in.new_tensor([[1.0]])
 
         if self.use_prior:
             z, mu, var = self._sample_from_prior(x_in.shape[0])
@@ -494,7 +740,9 @@ class FlowBowmanDecoder(BowmanDecoder):
             self.word_dropout.sample_mask(self.word_p_enc, x_in.shape)
             x_dropped = x_in.clone()
             x_dropped[self.word_dropout._mask == 0] = self.unk_index
-            z, mu, var, logdet, z_0, z_mu = self._sample_from_posterior(x_dropped, x_len, log_likelihood)
+            z, mu, var, logdet, z_0, z_mu = self._sample_from_posterior(
+                x_dropped, x_len, log_likelihood
+            )
 
         return z_0, z, z_prior, z_mu, mu, var, logdet
 
@@ -527,13 +775,16 @@ class FlowBowmanDecoder(BowmanDecoder):
             z_prior = self._sample_z(shape=torch.Size([num_samples, self.z_dim]))
             mu = torch.zeros_like(z_prior)
             var = torch.ones_like(z_prior)
-            if self.posterior == 'vmf':
-                mu[:, 0] = 1.
+            if self.posterior == "vmf":
+                mu[:, 0] = 1.0
         elif self.prior == "mog":
             # We first sample num_samples modes of the mixture prior, and then sample each mode
             # [num, ]
-            k = Categorical(logits=F.log_softmax(self.mixture_weights)).sample(
-                torch.Size([num_samples])).long()
+            k = (
+                Categorical(logits=F.log_softmax(self.mixture_weights))
+                .sample(torch.Size([num_samples]))
+                .long()
+            )
             mu, var = self._get_mixture_parameters()
 
             # [num, z_dim]
@@ -543,8 +794,11 @@ class FlowBowmanDecoder(BowmanDecoder):
         elif self.prior == "vamp":
             # We first sample num_samples pseudoinputs, and then return their posterior samples
             # [num, ]
-            k = Categorical(logits=F.log_softmax(self.pseudo_weights)).sample(
-                torch.Size([num_samples])).long()
+            k = (
+                Categorical(logits=F.log_softmax(self.pseudo_weights))
+                .sample(torch.Size([num_samples]))
+                .long()
+            )
             k = torch.sort(k, descending=False)[0]
             # [num, seq_len, x_dim]
             x = torch.index_select(self.pseudo_inputs, 0, k)
@@ -556,9 +810,11 @@ class FlowBowmanDecoder(BowmanDecoder):
 
         return z_prior, mu, var
 
-    def _compute_losses(self, x_in, x_mask, scores, z_0, z, z_prior, mu, var, logdet, log_likelihood):
+    def _compute_losses(
+        self, x_in, x_mask, scores, z_0, z, z_prior, mu, var, logdet, log_likelihood
+    ):
         """Computes the various VAE losses given scores and latent variables."""
-        losses = defaultdict(lambda: torch.tensor(0., device=self.device))
+        losses = defaultdict(lambda: torch.tensor(0.0, device=self.device))
         self._compute_rec_loss(scores, x_in, x_mask, log_likelihood, losses)
         if not self.use_prior:
             self._compute_reg_loss(z_0, z, mu, var, logdet, log_likelihood, losses)
@@ -567,8 +823,9 @@ class FlowBowmanDecoder(BowmanDecoder):
 
     def _compute_reg_loss(self, z_0, z, mu, var, logdet, log_likelihood, losses):
         """Computes the regularization losses given the latent variables."""
-        entropy = self._sample_log_likelihood(z_0, torch.tensor(
-            [1.], device=self.device), dim=1, mu=mu, var=var)
+        entropy = self._sample_log_likelihood(
+            z_0, torch.tensor([1.0], device=self.device), dim=1, mu=mu, var=var
+        )
         nll_prior = -self._prior_log_likelihood(z)
         losses["KL"] = entropy + nll_prior - logdet
         if not log_likelihood:
@@ -577,13 +834,20 @@ class FlowBowmanDecoder(BowmanDecoder):
     def _prior_log_likelihood(self, z):
         """Computes the log likelihood of the prior, p(z), for different priors."""
         if self.prior == "weak":
-            return self._sample_log_likelihood(z, torch.tensor([1.], device=self.device), 1)
+            return self._sample_log_likelihood(
+                z, torch.tensor([1.0], device=self.device), 1
+            )
         elif self.prior == "mog":
             mu, var = self._get_mixture_parameters()
             log_k = F.log_softmax(self.mixture_weights)
             # [batch_size, num_mixture]
-            mixture_log = self._sample_log_likelihood(z.unsqueeze(
-                1), torch.tensor([[1.]], device=self.device), dim=2, mu=mu, var=var)
+            mixture_log = self._sample_log_likelihood(
+                z.unsqueeze(1),
+                torch.tensor([[1.0]], device=self.device),
+                dim=2,
+                mu=mu,
+                var=var,
+            )
             # [batch_size]
             return torch.logsumexp(mixture_log + log_k, dim=1)
         elif self.prior == "vamp":
@@ -593,8 +857,13 @@ class FlowBowmanDecoder(BowmanDecoder):
             log_k = F.log_softmax(self.pseudo_weights)
 
             # [batch_size, num_pseudo]
-            pseudo_log = self._sample_log_likelihood(z.unsqueeze(1), torch.tensor(
-                [[1.]], device=self.device), dim=2, mu=mu, var=var)
+            pseudo_log = self._sample_log_likelihood(
+                z.unsqueeze(1),
+                torch.tensor([[1.0]], device=self.device),
+                dim=2,
+                mu=mu,
+                var=var,
+            )
             # [batch_size, ]
             return torch.logsumexp(pseudo_log + log_k, dim=1)
 
@@ -602,8 +871,9 @@ class FlowBowmanDecoder(BowmanDecoder):
         """Transforms the mixture parameter of the MoG prior according to the mixture distribution."""
         if self.posterior == "vmf":
             mu = self.mixture_mu / self.mixture_mu.norm(2, dim=-1, keepdim=True)
-            var = torch.tanh(self.mixture_var) * ((self.z_dim * 3.5 - self.z_dim / 3.5) / 2.) + \
-                ((self.z_dim * 3.5 + self.z_dim / 3.5) / 2)
+            var = torch.tanh(self.mixture_var) * (
+                (self.z_dim * 3.5 - self.z_dim / 3.5) / 2.0
+            ) + ((self.z_dim * 3.5 + self.z_dim / 3.5) / 2)
         else:
             mu = self.mixture_mu
             var = F.softplus(self.mixture_var)

@@ -39,7 +39,7 @@ from torch.nn.init import xavier_normal_
 from torch.nn.parameter import Parameter
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
@@ -68,13 +68,13 @@ class AutoregressiveLinear(nn.Module):
         self.diag = diag
         self.weight = Parameter(torch.Tensor(out_dim, in_dim))
 
-        if self.diag == 'one':
+        if self.diag == "one":
             self.I = torch.eye(out_dim, in_dim)
 
         if bias:
             self.bias = Parameter(torch.Tensor(out_dim))
         else:
-            self.register_parameter('bias', None)
+            self.register_parameter("bias", None)
 
         self.reset_parameters()
 
@@ -90,7 +90,9 @@ class AutoregressiveLinear(nn.Module):
         if self.diag == "zero":
             return F.linear(input, self.weight.tril(-1), self.bias)
         elif self.diag == "one":
-            return F.linear(input, self.weight.tril(-1) + input.new_tensor(self.I), self.bias)
+            return F.linear(
+                input, self.weight.tril(-1) + input.new_tensor(self.I), self.bias
+            )
         else:
             return F.linear(input, self.weight.tril(0), self.bias)
 
@@ -109,7 +111,16 @@ class AutoregressiveNetwork(nn.Module):
         nonlinearity(Function/Module): nonlinearity after each affine transformation. Defaults to ELU.
     """
 
-    def __init__(self, h_dim, z_dim, hidden_depth=1, bias=True, scale=True, diag="zero", nonlinearity=nn.ELU()):
+    def __init__(
+        self,
+        h_dim,
+        z_dim,
+        hidden_depth=1,
+        bias=True,
+        scale=True,
+        diag="zero",
+        nonlinearity=nn.ELU(),
+    ):
         super(AutoregressiveNetwork, self).__init__()
 
         self.h_dim = h_dim
@@ -120,14 +131,15 @@ class AutoregressiveNetwork(nn.Module):
 
         # First layer scales z -> h
         self.z_to_h = nn.Sequential(
-            AutoregressiveLinear(self.z_dim, self.h_dim, other_diag, bias),
-            nonlinearity)
+            AutoregressiveLinear(self.z_dim, self.h_dim, other_diag, bias), nonlinearity
+        )
 
         # Then N h -> h layers follow
         for i in range(hidden_depth):
             step = nn.Sequential(
                 AutoregressiveLinear(self.h_dim, self.h_dim, other_diag, bias),
-                nonlinearity)
+                nonlinearity,
+            )
             self.h_to_h.append(step)
 
         # Finally, we have two separate layers that produce a mu and var respectively.
@@ -137,8 +149,8 @@ class AutoregressiveNetwork(nn.Module):
         self.h_to_mu = AutoregressiveLinear(self.h_dim, self.z_dim, diag, bias)
         if self.scale:
             self.h_to_var = nn.Sequential(
-                AutoregressiveLinear(self.h_dim, self.z_dim, diag, bias),
-                nn.Sigmoid())
+                AutoregressiveLinear(self.h_dim, self.z_dim, diag, bias), nn.Sigmoid()
+            )
 
     def forward(self, z, h):
         """The forward pass computes a new mu and var that have zero determinants wrt the input z.
@@ -160,13 +172,12 @@ class AutoregressiveNetwork(nn.Module):
         if self.scale:
             var = self.h_to_var(h)
         else:
-            var = h.new_tensor([1.])
+            var = h.new_tensor([1.0])
 
         return mu, var
 
 
 class PlanarStep(nn.Module):
-
     def __init__(self):
         super(PlanarStep, self).__init__()
 
@@ -199,7 +210,7 @@ class PlanarStep(nn.Module):
 
         # reparameterize u such that the flow becomes invertible (see appendix paper)
         uw = torch.bmm(w, u)
-        m_uw = -1. + self.softplus(uw)
+        m_uw = -1.0 + self.softplus(uw)
         w_norm_sq = torch.sum(w ** 2, dim=2, keepdim=True)
         u_hat = u + ((m_uw - uw) * w.transpose(2, 1) / w_norm_sq)
 
@@ -273,7 +284,7 @@ class Planar(NormalizingFlow):
         b = self.h_to_b(h).view(-1, self.flow_depth, 1, 1)
 
         z_k = z
-        logdet = 0.
+        logdet = 0.0
         for k in range(self.flow_depth):
             z_k, ldj = self.flow(z_k, u[:, k, :, :], w[:, k, :, :], b[:, k, :, :])
             logdet += ldj
@@ -296,11 +307,25 @@ class IAF(NormalizingFlow):
         nonlinearity(Function/Module): nonlinearity after each affine transformation. Defaults to ELU.
     """
 
-    def __init__(self, h_dim, z_dim, flow_depth=2, hidden_depth=1, scale=True, nonlinearity=nn.ELU()):
+    def __init__(
+        self,
+        h_dim,
+        z_dim,
+        flow_depth=2,
+        hidden_depth=1,
+        scale=True,
+        nonlinearity=nn.ELU(),
+    ):
         super(IAF, self).__init__(h_dim, z_dim, flow_depth, hidden_depth)
         self.scale = scale
-        self.flow = nn.ModuleList([AutoregressiveNetwork(
-            h_dim, z_dim, hidden_depth, scale=scale, nonlinearity=nonlinearity) for _ in range(flow_depth)])
+        self.flow = nn.ModuleList(
+            [
+                AutoregressiveNetwork(
+                    h_dim, z_dim, hidden_depth, scale=scale, nonlinearity=nonlinearity
+                )
+                for _ in range(flow_depth)
+            ]
+        )
 
     def forward(self, z, h):
         """The forward pass computes a new z for each step in the flow and registers the log-determinant.
@@ -314,7 +339,7 @@ class IAF(NormalizingFlow):
             logdet(torch.FloatTensor): the logdeterminant of the flow for each item in the batch.
 
         """
-        logdet = 0.
+        logdet = 0.0
         for i, step in enumerate(self.flow):
             if i % 2 == 0:
                 # flip z every other step in the flow
@@ -339,4 +364,4 @@ class Diag(nn.Module):
         super(Diag, self).__init__()
 
     def forward(self, z, h):
-        return z, z.new_tensor([0.])
+        return z, z.new_tensor([0.0])

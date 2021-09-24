@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
@@ -45,10 +45,41 @@ class DeterministicDecoder(BaseDecoder):
         l_dim(int): number of layers of the RNN.
     """
 
-    def __init__(self, device, seq_len, word_p, parameter_p, drop_type, unk_index, css, sparse, N, rnn_type,
-                 tie_in_out, v_dim, x_dim, h_dim, s_dim, l_dim):
-        super(DeterministicDecoder, self).__init__(device, seq_len, word_p, parameter_p, drop_type, unk_index, css, N,
-                                                   rnn_type, v_dim, x_dim, h_dim, s_dim, l_dim)
+    def __init__(
+        self,
+        device,
+        seq_len,
+        word_p,
+        parameter_p,
+        drop_type,
+        unk_index,
+        css,
+        sparse,
+        N,
+        rnn_type,
+        tie_in_out,
+        v_dim,
+        x_dim,
+        h_dim,
+        s_dim,
+        l_dim,
+    ):
+        super(DeterministicDecoder, self).__init__(
+            device,
+            seq_len,
+            word_p,
+            parameter_p,
+            drop_type,
+            unk_index,
+            css,
+            N,
+            rnn_type,
+            v_dim,
+            x_dim,
+            h_dim,
+            s_dim,
+            l_dim,
+        )
 
         self.tie_in_out = tie_in_out
 
@@ -61,15 +92,17 @@ class DeterministicDecoder(BaseDecoder):
                 self.grnn = nn.GRU(x_dim, h_dim, l_dim, batch_first=True)
             else:
                 self.grnn = nn.ModuleList([nn.GRUCell(x_dim, h_dim, 1)])
-                self.grnn.extend([nn.GRUCell(h_dim, h_dim, 1)
-                                  for _ in range(l_dim - 1)])
+                self.grnn.extend(
+                    [nn.GRUCell(h_dim, h_dim, 1) for _ in range(l_dim - 1)]
+                )
         elif rnn_type == "LSTM":
             if self.drop_type in ["varied", "shared"]:
                 self.grnn = nn.LSTM(x_dim, h_dim, l_dim, batch_first=True)
             else:
                 self.grnn = nn.ModuleList([nn.LSTMCell(x_dim, h_dim, 1)])
-                self.grnn.extend([nn.LSTMCell(h_dim, h_dim, 1)
-                                  for _ in range(l_dim - 1)])
+                self.grnn.extend(
+                    [nn.LSTMCell(h_dim, h_dim, 1) for _ in range(l_dim - 1)]
+                )
         self.linear = nn.Linear(h_dim, v_dim)
 
     @property
@@ -82,7 +115,9 @@ class DeterministicDecoder(BaseDecoder):
 
         if self.tie_in_out:
             if self.h_dim != self.x_dim:
-                raise InvalidArgumentError("h_dim should match x_dim when tying weights.")
+                raise InvalidArgumentError(
+                    "h_dim should match x_dim when tying weights."
+                )
             self._linear.weight = self.emb.weight
 
     def forward(self, data, log_likelihood=False, extensive=False):
@@ -97,7 +132,7 @@ class DeterministicDecoder(BaseDecoder):
             pred(torch.LongTensor): most probable sequences given the data, as predicted by the model.
         """
         x_in, x_len, x_mask = self._unpack_data(data, 3)
-        losses = defaultdict(lambda: torch.tensor(0., device=self.device))
+        losses = defaultdict(lambda: torch.tensor(0.0, device=self.device))
 
         # Before decoding, we map a fraction of words to <UNK>, weakening the Decoder
         self.word_dropout.sample_mask(self.word_p, x_in.shape)
@@ -111,8 +146,10 @@ class DeterministicDecoder(BaseDecoder):
         if self.css and self.training:
             loss = self._css(scores, x_in[:, 1:])
         else:
-            loss = self.reconstruction_loss(scores.contiguous().view(
-                [-1, scores.shape[2]]), x_in[:, 1:].contiguous().view([-1])).view(scores.shape[0], scores.shape[1])
+            loss = self.reconstruction_loss(
+                scores.contiguous().view([-1, scores.shape[2]]),
+                x_in[:, 1:].contiguous().view([-1]),
+            ).view(scores.shape[0], scores.shape[1])
 
         if x_len is not None:
             # If we had padded sequences as input, we need to mask the padding from the loss
@@ -130,26 +167,40 @@ class DeterministicDecoder(BaseDecoder):
             losses["NLL"] = losses["NLL"].unsqueeze(0)
 
         if extensive:
-            return losses, pred, x.new_tensor([[1, 1]]), x.new_tensor([[1, 1]]), x.new_tensor([[1, 1]]), \
-                x.new_tensor([[1, 1]]), x.new_tensor([[1]]),  x.new_tensor([[1]])
+            return (
+                losses,
+                pred,
+                x.new_tensor([[1, 1]]),
+                x.new_tensor([[1, 1]]),
+                x.new_tensor([[1, 1]]),
+                x.new_tensor([[1, 1]]),
+                x.new_tensor([[1]]),
+                x.new_tensor([[1]]),
+            )
         else:
             return losses, pred
 
     def _rnn_forward(self, x, x_len):
         """Recurrent part of the forward pass. Decides between fast or slow based on the dropout type."""
         # Drop rows of the input
-        shape = torch.Size(x.shape) if self.var_mask else torch.Size([x.shape[0], 1, self.x_dim])
+        shape = (
+            torch.Size(x.shape)
+            if self.var_mask
+            else torch.Size([x.shape[0], 1, self.x_dim])
+        )
         h = self.parameter_dropout_in(x, self.parameter_p, shape=shape)
 
         # We have to run a (slow) for loop to use recurrent dropout
         if self.drop_type == "recurrent":
             # Sample fixed dropout masks for every timestep
-            shape = torch.Size([x.shape[0], int(self.h_dim/self.l_dim)])
+            shape = torch.Size([x.shape[0], int(self.h_dim / self.l_dim)])
             for i in range(self.l_dim):
                 self.parameter_dropout_hidden[i].sample_mask(self.parameter_p, shape)
                 self.parameter_dropout_out[i].sample_mask(self.parameter_p, shape)
                 if self.rnn_type == "LSTM":
-                    self.parameter_dropout_context[i].sample_mask(self.parameter_p, shape)
+                    self.parameter_dropout_context[i].sample_mask(
+                        self.parameter_p, shape
+                    )
 
             # Forward passing with application of dropout
             scores = []
@@ -174,7 +225,11 @@ class DeterministicDecoder(BaseDecoder):
         # For the input/output dropout we can use fast CUDA RNNs
         else:
             # To h: [batch_size, seq_len, h_dim] we apply the same mask: [batch_size, 1, h_dim] at every timestep
-            shape = torch.Size(h.shape) if self.var_mask else torch.Size([x.shape[0], 1, self.h_dim])
+            shape = (
+                torch.Size(h.shape)
+                if self.var_mask
+                else torch.Size([x.shape[0], 1, self.h_dim])
+            )
             if x_len is not None:
                 h = pack_padded_sequence(h, x_len - 1, batch_first=True)
             h, _ = self.grnn(h)
@@ -186,7 +241,9 @@ class DeterministicDecoder(BaseDecoder):
 
         return scores
 
-    def sample_sequences(self, x_i, seq_len, eos_token, pad_token, sample_softmax=False):
+    def sample_sequences(
+        self, x_i, seq_len, eos_token, pad_token, sample_softmax=False
+    ):
         """'Sample' sequences from the (learned) decoder given a prefix of tokens.
 
         Args:
@@ -242,7 +299,7 @@ class DeterministicDecoder(BaseDecoder):
         for spot in eos_spot:
             if spot[0] != prev_row:
                 try:
-                    samples[spot[0], spot[1]+1:] = pad_token
+                    samples[spot[0], spot[1] + 1 :] = pad_token
                 except IndexError:
                     pass
             else:
@@ -253,4 +310,6 @@ class DeterministicDecoder(BaseDecoder):
 
     def _sample_hidden(self, batch_size):
         """Sample the hidden state of a GRU RNN from a standard normal."""
-        return torch.normal(mean=torch.zeros((self.l_dim, batch_size, self.h_dim), device=self.device))
+        return torch.normal(
+            mean=torch.zeros((self.l_dim, batch_size, self.h_dim), device=self.device)
+        )
