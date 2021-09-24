@@ -45,7 +45,7 @@ def convert_to_indices(files, max_vocab, replace, sos, eos, pad):
 
     for file, dataset in zip(files, sentences):
         ## assumes "coco.train.txt" filenames -> train.indices
-        with open(file.split('.txt')[1] + ".indices", 'w', encoding='utf8') as f:
+        with open(file.split('.')[1] + ".indices", 'w', encoding='utf8') as f:
             # f.write("\n".join([" ".join([str(word_to_idx[token]) for token in sentence]) for sentence in dataset]))
             for sentence in dataset:
                 sids = []
