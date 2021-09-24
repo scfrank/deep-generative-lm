@@ -257,7 +257,7 @@ class BowmanDecoder(GenerativeDecoder):
         )
         x = self.parameter_dropout_in(x, self.parameter_p, shape=shape)
         if x_len is not None:
-            x = pack_padded_sequence(x, x_len - 1, batch_first=True)
+            x = pack_padded_sequence(x, (x_len - 1).cpu(), batch_first=True)
         h, _ = self.decoder(x, h)
         if x_len is not None:
             h = pad_packed_sequence(
