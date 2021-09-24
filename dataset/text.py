@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import Dataset
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
@@ -33,11 +33,13 @@ class SimpleTextData(Dataset):
 
     def __init__(self, file, seq_len):
         if seq_len == 0:
-            self._seq_len = len(max(open(file, 'r'), key=len).split())
+            self._seq_len = len(max(open(file, "r"), key=len).split())
         else:
             self._seq_len = seq_len
 
-        self._data = [line.split()[:self._seq_len] for line in open(file, 'r') if line != "\n"]
+        self._data = [
+            line.split()[: self._seq_len] for line in open(file, "r") if line != "\n"
+        ]
         self._data_len = len(self._data)
 
     def __len__(self):
@@ -59,9 +61,9 @@ class TextDataSplit(SimpleTextData):
     def __init__(self, file, seq_len, train):
         super().__init__(file, seq_len)
         if train:
-            self._data = self._data[:int(self.data.shape[0] * 0.9), :]
+            self._data = self._data[: int(self.data.shape[0] * 0.9), :]
         else:
-            self._data = self._data[int(self.data.shape[0] * 0.9):, :]
+            self._data = self._data[int(self.data.shape[0] * 0.9) :, :]
         self._data_len = self.data.shape[0]
 
 
@@ -79,7 +81,11 @@ class TextDataUnPadded(SimpleTextData):
         super().__init__(file, seq_len)
 
         # This class also provides reversed sequences that are needed in certain generative model training
-        self._reverse_data = [line.split()[:self._seq_len][::-1] for line in open(file, 'r') if line != '\n']
+        self._reverse_data = [
+            line.split()[: self._seq_len][::-1]
+            for line in open(file, "r")
+            if line != "\n"
+        ]
         self._pad_token = pad_token
 
     def __getitem__(self, idx):
@@ -110,11 +116,18 @@ class TextDataPadded(TextDataUnPadded):
 
         self._seq_lens = torch.LongTensor(self._seq_lens)
         self._data = torch.from_numpy(np.array(self._data, dtype=np.int64))
-        self._reverse_data = torch.from_numpy(np.array(self._reverse_data, dtype=np.int64))
-        self._mask = 1. - (self._data == pad_token).float()
+        self._reverse_data = torch.from_numpy(
+            np.array(self._reverse_data, dtype=np.int64)
+        )
+        self._mask = 1.0 - (self._data == pad_token).float()
 
     def __getitem__(self, idx):
-        return self._data[idx], self._seq_lens[idx], self._mask[idx], self._reverse_data[idx]
+        return (
+            self._data[idx],
+            self._seq_lens[idx],
+            self._mask[idx],
+            self._reverse_data[idx],
+        )
 
 
 def sort_collate(batch):
@@ -135,7 +148,9 @@ def sort_collate(batch):
         InvalidLengthError: if the input has less than two variables per index.
     """
     if len(batch[0]) < 2:
-        raise InvalidLengthError("Batch needs to contain at least data (batch[0]) and lengths (batch[1]).")
+        raise InvalidLengthError(
+            "Batch needs to contain at least data (batch[0]) and lengths (batch[1])."
+        )
 
     # Unpack batch from list of tuples [(x_i, y_i, ...), ...] to list of tensors [x, y, ...]
     batch = [torch.stack([b[i] for b in batch]) for i in range(len(batch[0]))]
@@ -168,7 +183,8 @@ def sort_pad_collate(batch):
     """
     if len(batch[0]) != 3:
         raise InvalidLengthError(
-            "Batch needs to contain data (batch[0]), reverse_data (batch[1]) and pad_token (batch[2]).")
+            "Batch needs to contain data (batch[0]), reverse_data (batch[1]) and pad_token (batch[2])."
+        )
 
     # Unpack batch from list of tuples [(x_i, y_i, ...), ...] to list of lists [x, y, ...]
     batch = [[b[i] for b in batch] for i in range(len(batch[0]))]
@@ -190,7 +206,7 @@ def sort_pad_collate(batch):
     batch.append(torch.from_numpy(np.array(batch[1], dtype=np.int64)))
     # Store length and mask in correct format and order
     batch[1] = x_len
-    batch[2] = 1. - (batch[0] == pad_token).float()
+    batch[2] = 1.0 - (batch[0] == pad_token).float()
 
     # Get lengths from second tensor in batch and sort all batch data based on those lengths
     _, indices = torch.sort(batch[1], descending=True)

@@ -23,27 +23,29 @@ def main():
     if not osp.isdir(opt.out_folder):
         os.makedirs(opt.out_folder)
 
-    if opt.script == 'generative':
-        if opt.mode == 'train':
+    if opt.script == "generative":
+        if opt.mode == "train":
             train(opt)
-        elif opt.mode == 'test':
+        elif opt.mode == "test":
             test(opt)
-        elif opt.mode == 'generate':
+        elif opt.mode == "generate":
             generate_data(opt)
-        elif opt.mode == 'novelty':
+        elif opt.mode == "novelty":
             novelty(opt)
-        elif opt.mode == 'qualitative':
+        elif opt.mode == "qualitative":
             qualitative(opt)
         else:
             raise UnknownArgumentError(
-                "--mode not recognized, please choose: [train, test, generate, qualitative, novelty].")
-    elif opt.script == 'bayesopt':
+                "--mode not recognized, please choose: [train, test, generate, qualitative, novelty]."
+            )
+    elif opt.script == "bayesopt":
         optimize_bayesian(opt, parser)
-    elif opt.script == 'grid':
+    elif opt.script == "grid":
         run_grid(opt, parser)
     else:
         raise UnknownArgumentError(
-            "--script not recognized, please choose: [generative, bayesopt, grid].")
+            "--script not recognized, please choose: [generative, bayesopt, grid]."
+        )
 
 
 if __name__ == "__main__":

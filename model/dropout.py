@@ -38,6 +38,6 @@ class FlexibleDropout(nn.Module):
             shape(torch.Size): shape of the mask to be sampled.
         """
         if self.training:
-            self._mask = Bernoulli(1. - p).sample(shape)
+            self._mask = Bernoulli(1.0 - p).sample(shape)
         else:
-            self._mask = (1. - p)
+            self._mask = 1.0 - p

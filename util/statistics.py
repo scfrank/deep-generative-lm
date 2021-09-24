@@ -11,7 +11,7 @@ class StatsHandler(object):
     def __init__(self, opt):
         num_samples = 1
         self.train_loss = list()
-        self.kl_scale = 0.
+        self.kl_scale = 0.0
         self.train_kl = list()
         self.train_elbo = list()
         self.train_min_rate = list()
@@ -37,14 +37,14 @@ class StatsHandler(object):
         self.avg_len = list()
         self.lambs = [[] for _ in range(len(opt.constraint))]
         self.constraints = [[] for _ in range(len(opt.constraint))]
-        self.val_nll = 0.
-        self.val_mi = 0.
-        self.val_mkl = 0.
-        self.val_est_ppl = 0.
-        self.val_au = 0.
-        self.val_bleu = 0.
-        self.val_ter = 0.
-        self.val_novelty = 0.
+        self.val_nll = 0.0
+        self.val_mi = 0.0
+        self.val_mkl = 0.0
+        self.val_est_ppl = 0.0
+        self.val_au = 0.0
+        self.val_bleu = 0.0
+        self.val_ter = 0.0
+        self.val_novelty = 0.0
         self.epoch = 0
         self.opt = opt
         self.prepared = False
@@ -54,53 +54,83 @@ class StatsHandler(object):
             try:
                 self.prepare_stats()
             except ValueError:
-                return ("No stats collected, nothing to print.")
+                return "No stats collected, nothing to print."
 
-        if self.opt.mode == 'train':
-            return ("__________________________________\n"
-                    + "Epoch: {:.3f}\n".format(self.epoch)
-                    + "Moving Average ELBO: {:.3f} (KL: {:.3f}, Scale: {:.3f})\n".format(self.train_elbo,
-                                                                                         self.train_kl, self.kl_scale)
-                    + "Hinge Loss: {:.3f}, MMD: {:.3f}, L2 Loss: {:.3f}\n".format(
-                        self.train_min_rate, self.train_mmd, self.train_l2_loss)
-                    + "Accuracy: {:.3f}\n".format(self.train_acc)
-                    + "_______________\n"
-                    + "Val Prior Loss: {:.3f}\n".format(self.val_loss)
-                    + "Val Prior PPL: {:.3f} ({:.3f})\n".format(self.val_ppl, self.val_ppl_std)
-                    + "Val Prior Accuracy: {:.3f}\n".format(self.val_acc)
-                    + "_______________ \n"
-                    + "Val ELBO: {:.3f} (KL: {:.3f})\n".format(self.val_rec_elbo, self.val_rec_kl)
-                    + "Val ELBO PPL: {:.3f} ({:.3f})\n".format(self.val_rec_ppl, self.val_rec_ppl_std)
-                    + "Val Hinge Loss: {:.3f}, MMD: {:.3f}, L2 Loss: {:.3f}\n".format(
-                        self.val_rec_min_rate, self.val_rec_mmd, self.val_rec_l2_loss)
-                    + "Val Accuracy: {:.3f}\n".format(self.val_rec_acc)
-                    + "".join(["Lambda_{}: {:.3f}, Constraint_{}: {:.3f}\n".format(i, l, i, c)
-                               for i, (l, c) in enumerate(zip(self.lambs, self.constraints))])
-                    + "Val MI: {:.3f}, Val Marginal KL: {:.3f}\n".format(self.val_mi, self.val_mkl)
-                    + "__________________________________\n"
-                    )
+        if self.opt.mode == "train":
+            return (
+                "__________________________________\n"
+                + "Epoch: {:.3f}\n".format(self.epoch)
+                + "Moving Average ELBO: {:.3f} (KL: {:.3f}, Scale: {:.3f})\n".format(
+                    self.train_elbo, self.train_kl, self.kl_scale
+                )
+                + "Hinge Loss: {:.3f}, MMD: {:.3f}, L2 Loss: {:.3f}\n".format(
+                    self.train_min_rate, self.train_mmd, self.train_l2_loss
+                )
+                + "Accuracy: {:.3f}\n".format(self.train_acc)
+                + "_______________\n"
+                + "Val Prior Loss: {:.3f}\n".format(self.val_loss)
+                + "Val Prior PPL: {:.3f} ({:.3f})\n".format(
+                    self.val_ppl, self.val_ppl_std
+                )
+                + "Val Prior Accuracy: {:.3f}\n".format(self.val_acc)
+                + "_______________ \n"
+                + "Val ELBO: {:.3f} (KL: {:.3f})\n".format(
+                    self.val_rec_elbo, self.val_rec_kl
+                )
+                + "Val ELBO PPL: {:.3f} ({:.3f})\n".format(
+                    self.val_rec_ppl, self.val_rec_ppl_std
+                )
+                + "Val Hinge Loss: {:.3f}, MMD: {:.3f}, L2 Loss: {:.3f}\n".format(
+                    self.val_rec_min_rate, self.val_rec_mmd, self.val_rec_l2_loss
+                )
+                + "Val Accuracy: {:.3f}\n".format(self.val_rec_acc)
+                + "".join(
+                    [
+                        "Lambda_{}: {:.3f}, Constraint_{}: {:.3f}\n".format(i, l, i, c)
+                        for i, (l, c) in enumerate(zip(self.lambs, self.constraints))
+                    ]
+                )
+                + "Val MI: {:.3f}, Val Marginal KL: {:.3f}\n".format(
+                    self.val_mi, self.val_mkl
+                )
+                + "__________________________________\n"
+            )
         else:
-            return ("__________________________________\n"
-                    + "Test Prior Loss: {:.3f}\n".format(self.val_loss)
-                    + "Test Prior PPL: {:.3f} ({:.3f})\n".format(self.val_ppl, self.val_ppl_std)
-                    + "Test Prior Accuracy: {:.3f}\n".format(self.val_acc)
-                    + "_______________ \n"
-                    + "Test ELBO: {:.3f} ({:.3f})\n".format(self.val_rec_elbo, self.val_rec_kl)
-                    + "Test Estimated NLL: {:.3f}\n".format(self.val_nll)
-                    + "Test Estimated PPL: {:.3f}\n".format(self.val_est_ppl)
-                    + "Test ELBO PPL: {:.3f} ({:.3f})\n".format(self.val_rec_ppl, self.val_rec_ppl_std)
-                    + "Test Hinge Loss: {:.3f}, MMD: {:.3f}, L2 Loss: {:.3f}\n".format(
-                        self.val_rec_min_rate, self.val_rec_mmd, self.val_rec_l2_loss)
-                    + "Test Accuracy: {:.3f}\n".format(self.val_rec_acc)
-                    + "Test Active Units: {}\n".format(self.val_au)
-                    + "Test Corpus BLEU: {:.3f}\n".format(self.val_bleu)
-                    + "Test Corpus TER: {:.3f}\n".format(self.val_ter)
-                    + "Test Novelty: {:.3f}\n".format(self.val_novelty)
-                    + "".join(["Lambda_{}: {:.3f}, Constraint_{}: {:.3f}\n".format(i, l, i, c)
-                               for i, (l, c) in enumerate(zip(self.lambs, self.constraints))])
-                    + "Test MI: {:.3f}, Test Marginal KL: {:.3f}\n".format(self.val_mi, self.val_mkl)
-                    + "__________________________________\n"
-                    )
+            return (
+                "__________________________________\n"
+                + "Test Prior Loss: {:.3f}\n".format(self.val_loss)
+                + "Test Prior PPL: {:.3f} ({:.3f})\n".format(
+                    self.val_ppl, self.val_ppl_std
+                )
+                + "Test Prior Accuracy: {:.3f}\n".format(self.val_acc)
+                + "_______________ \n"
+                + "Test ELBO: {:.3f} ({:.3f})\n".format(
+                    self.val_rec_elbo, self.val_rec_kl
+                )
+                + "Test Estimated NLL: {:.3f}\n".format(self.val_nll)
+                + "Test Estimated PPL: {:.3f}\n".format(self.val_est_ppl)
+                + "Test ELBO PPL: {:.3f} ({:.3f})\n".format(
+                    self.val_rec_ppl, self.val_rec_ppl_std
+                )
+                + "Test Hinge Loss: {:.3f}, MMD: {:.3f}, L2 Loss: {:.3f}\n".format(
+                    self.val_rec_min_rate, self.val_rec_mmd, self.val_rec_l2_loss
+                )
+                + "Test Accuracy: {:.3f}\n".format(self.val_rec_acc)
+                + "Test Active Units: {}\n".format(self.val_au)
+                + "Test Corpus BLEU: {:.3f}\n".format(self.val_bleu)
+                + "Test Corpus TER: {:.3f}\n".format(self.val_ter)
+                + "Test Novelty: {:.3f}\n".format(self.val_novelty)
+                + "".join(
+                    [
+                        "Lambda_{}: {:.3f}, Constraint_{}: {:.3f}\n".format(i, l, i, c)
+                        for i, (l, c) in enumerate(zip(self.lambs, self.constraints))
+                    ]
+                )
+                + "Test MI: {:.3f}, Test Marginal KL: {:.3f}\n".format(
+                    self.val_mi, self.val_mkl
+                )
+                + "__________________________________\n"
+            )
 
     def log_stats(self, writer):
         """Logs the collected stats to a TensorBoard logging file given a SummaryWriter."""
@@ -111,7 +141,7 @@ class StatsHandler(object):
                 print("No stats collected, nothing to log.")
                 return
 
-        if self.opt.mode == 'train':
+        if self.opt.mode == "train":
             writer.add_scalar("Train Loss", self.train_loss, self.epoch)
             writer.add_scalar("Train KL", self.train_kl, self.epoch)
             writer.add_scalar("Train ELBO", self.train_elbo, self.epoch)
@@ -149,10 +179,14 @@ class StatsHandler(object):
             writer.add_scalar("Test Accuracy", self.val_rec_acc, self.epoch)
             writer.add_scalar("Test PPL", self.val_rec_ppl, self.epoch)
 
-        [writer.add_scalar("Lagrangian Lambda {}".format(i), l, self.epoch)
-         for i, l in enumerate(self.lambs)]
-        [writer.add_scalar("Lagrangian Constraint {}".format(i), l, self.epoch)
-         for i, l in enumerate(self.constraints)]
+        [
+            writer.add_scalar("Lagrangian Lambda {}".format(i), l, self.epoch)
+            for i, l in enumerate(self.lambs)
+        ]
+        [
+            writer.add_scalar("Lagrangian Constraint {}".format(i), l, self.epoch)
+            for i, l in enumerate(self.constraints)
+        ]
 
     def prepare_stats(self):
         """Prepares the collected stats for printing and logging.
@@ -161,12 +195,16 @@ class StatsHandler(object):
         after calling this function. Call reset() to start collecting new stats. This function is automatically called
         before printing or logging.
         """
-        if self.opt.mode == 'train':
+        if self.opt.mode == "train":
             self.train_loss = self.moving_average(self.train_loss, len(self.train_loss))
             self.train_kl = self.moving_average(self.train_kl, len(self.train_kl))
             self.train_elbo = self.moving_average(self.train_elbo, len(self.train_elbo))
-            self.train_min_rate = self.moving_average(self.train_min_rate, len(self.train_min_rate))
-            self.train_l2_loss = self.moving_average(self.train_l2_loss, len(self.train_l2_loss))
+            self.train_min_rate = self.moving_average(
+                self.train_min_rate, len(self.train_min_rate)
+            )
+            self.train_l2_loss = self.moving_average(
+                self.train_l2_loss, len(self.train_l2_loss)
+            )
             self.train_acc = np.array(self.train_acc).mean()
             self.train_mmd = np.array(self.train_mmd).mean()
 

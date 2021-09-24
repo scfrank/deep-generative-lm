@@ -14,15 +14,40 @@ from torch.nn.utils import clip_grad_norm_
 from tensorboardX import SummaryWriter  # worry about this later
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
 from dataset.text import sort_pad_collate  # noqa: E402
 from util.statistics import StatsHandler  # noqa: E402
-from util.storage import seed, initialize_model, initialize_dataloader, save_checkpoint, load_checkpoint, load_model, save_samples, load_word_index_maps, load_options, save_novelties  # noqa: E402
-from util.evaluation import compute_accuracy, compute_perplexity, get_samples, compute_bleu, compute_active_units, compute_ter, compute_novelty, compute_mutual_information  # noqa: E402
-from util.error import UnknownArgumentError, InvalidPathError, NoModelError, Error  # noqa: E402
+from util.storage import (
+    seed,
+    initialize_model,
+    initialize_dataloader,
+    save_checkpoint,
+    load_checkpoint,
+    load_model,
+    save_samples,
+    load_word_index_maps,
+    load_options,
+    save_novelties,
+)  # noqa: E402
+from util.evaluation import (
+    compute_accuracy,
+    compute_perplexity,
+    get_samples,
+    compute_bleu,
+    compute_active_units,
+    compute_ter,
+    compute_novelty,
+    compute_mutual_information,
+)  # noqa: E402
+from util.error import (
+    UnknownArgumentError,
+    InvalidPathError,
+    NoModelError,
+    Error,
+)  # noqa: E402
 from util.display import vprint  # noqa: E402
 
 __author__ = "Tom Pelsmaeker"
@@ -40,13 +65,19 @@ def train(opt):
             opt.resume = 0
             epoch = 0
         except Error as e:
-            warn("{}\n Make sure all preset arguments coincide with the model you are loading.".format(e))
+            warn(
+                "{}\n Make sure all preset arguments coincide with the model you are loading.".format(
+                    e
+                )
+            )
     else:
         epoch = 0
 
     # Set device so script works on both GPU and CPU
     seed(opt)
-    opt.device = torch.device("cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu")
+    opt.device = torch.device(
+        "cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu"
+    )
     vprint("Using device: {}".format(opt.device), opt.verbosity, 1)
 
     word_to_idx, idx_to_word = load_word_index_maps(opt)
@@ -57,15 +88,31 @@ def train(opt):
     decoder = initialize_model(opt, word_to_idx)
     optimizers = []
     if opt.sparse:
-        sparse_parameters = [p[1] for p in filter(lambda p: p[0] == "emb.weight", decoder.named_parameters())]
-        parameters = [p[1] for p in filter(lambda p: p[1].requires_grad and p[0]
-                                           != "emb.weight", decoder.named_parameters())]
+        sparse_parameters = [
+            p[1]
+            for p in filter(lambda p: p[0] == "emb.weight", decoder.named_parameters())
+        ]
+        parameters = [
+            p[1]
+            for p in filter(
+                lambda p: p[1].requires_grad and p[0] != "emb.weight",
+                decoder.named_parameters(),
+            )
+        ]
         optimizers.append(Adam(parameters, opt.lr))
         optimizers.append(SparseAdam(sparse_parameters, opt.lr))
     elif opt.lagrangian:
-        lag_parameters = [p[1] for p in filter(lambda p: p[0] == "lag_weight", decoder.named_parameters())]
-        parameters = [p[1] for p in filter(lambda p: p[1].requires_grad and p[0]
-                                           != "lag_weight.weight", decoder.named_parameters())]
+        lag_parameters = [
+            p[1]
+            for p in filter(lambda p: p[0] == "lag_weight", decoder.named_parameters())
+        ]
+        parameters = [
+            p[1]
+            for p in filter(
+                lambda p: p[1].requires_grad and p[0] != "lag_weight.weight",
+                decoder.named_parameters(),
+            )
+        ]
         optimizers.append(Adam(parameters, opt.lr))
         optimizers.append(RMSprop(lag_parameters, opt.lr))
     else:
@@ -77,7 +124,9 @@ def train(opt):
         decoder, optimizers, epoch = load_checkpoint(opt, decoder, optimizers)
 
     # The SummaryWriter will log certain values for automatic visualization
-    writer = SummaryWriter(osp.join(opt.out_folder, opt.model, opt.save_suffix, 'train'))
+    writer = SummaryWriter(
+        osp.join(opt.out_folder, opt.model, opt.save_suffix, "train")
+    )
 
     # The StatsHandler object will store important stastics during training and provides printing and logging utilities
     stats = StatsHandler(opt)
@@ -109,7 +158,13 @@ def train(opt):
 
             # Forward
             losses, pred = decoder(data)
-            loss = sum([v for k, v in losses.items() if "Lag_Weight" not in k and "Constraint_" not in k])
+            loss = sum(
+                [
+                    v
+                    for k, v in losses.items()
+                    if "Lag_Weight" not in k and "Constraint_" not in k
+                ]
+            )
 
             # Log the various losses the models can return, and accuracy
             stats.train_loss.append(losses["NLL"].item())
@@ -136,14 +191,16 @@ def train(opt):
             if nan:
                 break
 
-            if opt.clip > 0.:
-                clip_grad_norm_(decoder.parameters(), opt.clip)  # Might prevent exploding gradients
+            if opt.clip > 0.0:
+                clip_grad_norm_(
+                    decoder.parameters(), opt.clip
+                )  # Might prevent exploding gradients
 
             if opt.lagrangian:
                 # This is equivalent to flipping the sign on the loss and computing its backward
                 # So it prevents computation of the backward twice, once for max and once for min
                 for group in optimizers[1].param_groups:
-                    for p in group['params']:
+                    for p in group["params"]:
                         p.grad = -1 * p.grad
 
             [optimizer.step() for optimizer in optimizers]
@@ -184,9 +241,12 @@ def train(opt):
                 # Also sample the perplexity for the reconstruction case (using the posterior)
                 decoder.use_prior = False
                 if opt.mi:
-                    losses, pred, var, mu, z, _, log_q_z_x, log_p_z = decoder(data, extensive=True)
+                    losses, pred, var, mu, z, _, log_q_z_x, log_p_z = decoder(
+                        data, extensive=True
+                    )
                     zs.append(z), log_q_z_xs.append(log_q_z_x), log_p_zs.append(
-                        log_p_z), mus.append(mu), vars.append(var)
+                        log_p_z
+                    ), mus.append(mu), vars.append(var)
                 else:
                     losses, pred = decoder(data)
                 stats.val_rec_loss.append(losses["NLL"].item())
@@ -196,7 +256,9 @@ def train(opt):
                 stats.val_rec_l2_loss.append(losses["L2"].item())
                 stats.val_rec_mmd.append(losses["MMD"].item())
                 stats.val_rec_acc.append(compute_accuracy(pred, data).item())
-                stats.val_rec_log_loss[0].append(losses["NLL"].item() + losses["KL"].item())
+                stats.val_rec_log_loss[0].append(
+                    losses["NLL"].item() + losses["KL"].item()
+                )
 
             if opt.mi:
                 # Stack the collected samples and parameters
@@ -205,11 +267,14 @@ def train(opt):
                 log_p_z = torch.cat(log_p_zs, 0)
                 mu = torch.cat(mus, 0)
                 var = torch.cat(vars, 0)
-                avg_kl = torch.tensor(stats.val_rec_kl, dtype=torch.float, device=opt.device).mean()
+                avg_kl = torch.tensor(
+                    stats.val_rec_kl, dtype=torch.float, device=opt.device
+                ).mean()
                 avg_h = log_q_z_x.mean()
                 log_q_z = decoder.q_z_estimate(z, mu, var)
                 stats.val_mi, stats.val_mkl = compute_mutual_information(
-                    z, log_p_z, avg_h, avg_kl, opt.mi_method, opt.mi_kde_method, log_q_z)
+                    z, log_p_z, avg_h, avg_kl, opt.mi_method, opt.mi_kde_method, log_q_z
+                )
         end = time.time()
         print("Eval time: {}s".format(end - start))
 
@@ -232,7 +297,7 @@ def train(opt):
         stop = [0] * len(opt.criteria)
         i = 0
         # This is the default criteria; we will stop when the ELBO/LL no longer improves
-        if 'posterior' in opt.criteria:
+        if "posterior" in opt.criteria:
             if stats.val_rec_elbo > (prev_crit[i] - opt.min_imp) and epoch > 4:
                 stop[i] = 1
             else:
@@ -242,13 +307,17 @@ def train(opt):
                     save_checkpoint(opt, decoder, optimizers, epoch)
                 except InvalidPathError as e:
                     vprint(e, opt.verbosity, 0)
-                    vprint("Cannot save model, continuing without saving...", opt.verbosity, 0)
+                    vprint(
+                        "Cannot save model, continuing without saving...",
+                        opt.verbosity,
+                        0,
+                    )
                 prev_crit[i] = stats.val_rec_elbo
             i += 1
 
         # We early stop the model when an estimate of the log-likelihood based on prior samples no longer increases
         # This generally only makes sense when we have a learned prior
-        if 'prior' in opt.criteria:
+        if "prior" in opt.criteria:
             if stats.val_loss > (prev_crit[i] - opt.min_imp) and epoch > 4:
                 stop[i] = 1
             else:
@@ -256,16 +325,21 @@ def train(opt):
             if stats.val_loss < prev_crit[i]:
                 try:
                     # For each non standard criteria we add a suffix to the model name
-                    save_checkpoint(opt, decoder, optimizers, epoch, 'prior')
+                    save_checkpoint(opt, decoder, optimizers, epoch, "prior")
                 except InvalidPathError as e:
                     vprint(e, opt.verbosity, 0)
-                    vprint("Cannot save model, continuing without saving...", opt.verbosity, 0)
+                    vprint(
+                        "Cannot save model, continuing without saving...",
+                        opt.verbosity,
+                        0,
+                    )
                 prev_crit[i] = stats.val_loss
 
         # So far we can choose to either/or save models based on prior loss and posterior loss
-        if 'prior' not in opt.criteria and 'posterior' not in opt.criteria:
+        if "prior" not in opt.criteria and "posterior" not in opt.criteria:
             raise UnknownArgumentError(
-                "No valid early stopping criteria found, please choose either/both [posterior, prior]")
+                "No valid early stopping criteria found, please choose either/both [posterior, prior]"
+            )
 
         # We only increase the stop ticks if all criteria are not satisfied
         stop_ticks += int(np.all(np.array(stop)))
@@ -285,14 +359,20 @@ def test(opt):
     except InvalidPathError as e:
         raise NoModelError("Aborting testing without a valid model to load.") from e
     except Error as e:
-        warn("{}\n Make sure all preset arguments coincide with the model you are loading.".format(e))
+        warn(
+            "{}\n Make sure all preset arguments coincide with the model you are loading.".format(
+                e
+            )
+        )
 
     # We test with a batch size of 1 to get exact results
     batch_size = opt.batch_size
     opt.batch_size = 1
 
     # Set device so script works on both GPU and CPU
-    opt.device = torch.device("cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu")
+    opt.device = torch.device(
+        "cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu"
+    )
     vprint("Using device: {}".format(opt.device), opt.verbosity, 1)
 
     word_to_idx, idx_to_word = load_word_index_maps(opt)
@@ -305,7 +385,7 @@ def test(opt):
     decoder = load_model(opt, decoder)
 
     # The summary writer will log certain values for automatic visualization
-    writer = SummaryWriter(osp.join(opt.out_folder, opt.model, opt.save_suffix, 'test'))
+    writer = SummaryWriter(osp.join(opt.out_folder, opt.model, opt.save_suffix, "test"))
 
     # The StatsHandler object will store important stastics during testing and provides printing and logging utilities
     stats = StatsHandler(opt)
@@ -348,10 +428,13 @@ def test(opt):
 
             # Also sample the perplexity for the reconstruction case
             decoder.use_prior = False
-            losses, pred, var, mu, z, z_prior, log_q_z_x, log_p_z = decoder(data, extensive=True)
+            losses, pred, var, mu, z, z_prior, log_q_z_x, log_p_z = decoder(
+                data, extensive=True
+            )
             preds.extend(pred.tolist())
             zs.append(z), z_priors.append(z_prior), vars.append(var), mus.append(
-                mu), log_q_z_xs.append(log_q_z_x), log_p_zs.append(log_p_z)
+                mu
+            ), log_q_z_xs.append(log_q_z_x), log_p_zs.append(log_p_z)
             stats.val_rec_loss.append(losses["NLL"].item())
             stats.val_rec_kl.append(losses["KL"].item())
             stats.val_rec_elbo.append(losses["NLL"].item() + losses["KL"].item())
@@ -371,7 +454,9 @@ def test(opt):
         z = torch.cat(zs, 0)
         log_q_z_x = torch.cat(log_q_z_xs, 0)
         log_p_z = torch.cat(log_p_zs, 0)
-        avg_kl = torch.tensor(stats.val_rec_kl, dtype=torch.float, device=opt.device).mean()
+        avg_kl = torch.tensor(
+            stats.val_rec_kl, dtype=torch.float, device=opt.device
+        ).mean()
         avg_h = log_q_z_x.mean()
 
         # We compute the MMD over the full validation set
@@ -381,7 +466,8 @@ def test(opt):
         if opt.mi:
             log_q_z = decoder.q_z_estimate(z, mu, var)
             stats.val_mi, stats.val_mkl = compute_mutual_information(
-                z, log_p_z, avg_h, avg_kl, opt.mi_method, opt.mi_kde_method, log_q_z)
+                z, log_p_z, avg_h, avg_kl, opt.mi_method, opt.mi_kde_method, log_q_z
+            )
 
         # Active units are the number of dimensions in the latent space that do something
         stats.val_au = compute_active_units(mu, opt.delta)
@@ -396,23 +482,42 @@ def test(opt):
 
             print("Computing Novelty....")
             # Novelty is minimum TER of a generated sentence compared with the training corpus
-            stats.val_novelty, _ = compute_novelty(get_samples(opt, decoder, idx_to_word, word_to_idx)[1],
-                                                   osp.join(opt.data_folder, opt.train_file),
-                                                   opt, idx_to_word)
+            stats.val_novelty, _ = compute_novelty(
+                get_samples(opt, decoder, idx_to_word, word_to_idx)[1],
+                osp.join(opt.data_folder, opt.train_file),
+                opt,
+                idx_to_word,
+            )
 
-        if opt.log_likelihood and opt.model != 'deterministic':
+        if opt.log_likelihood and opt.model != "deterministic":
             repeat = max(int(opt.ll_samples / opt.ll_batch), 1)
-            opt.ll_batch = opt.ll_samples if opt.ll_samples < opt.ll_batch else opt.ll_batch
-            normalizer = torch.log(torch.tensor(int(opt.ll_samples / opt.ll_batch)
-                                                * opt.ll_batch, device=opt.device, dtype=torch.float))
+            opt.ll_batch = (
+                opt.ll_samples if opt.ll_samples < opt.ll_batch else opt.ll_batch
+            )
+            normalizer = torch.log(
+                torch.tensor(
+                    int(opt.ll_samples / opt.ll_batch) * opt.ll_batch,
+                    device=opt.device,
+                    dtype=torch.float,
+                )
+            )
             stats.val_nll = []
             for i, data in enumerate(data_test):
                 if i % 100 == 0:
-                    vprint("\r At {:.3f} percent of log likelihood estimation\r".format(
-                        float(i) / len(data_test) * 100), opt.verbosity, 1, end="")
+                    vprint(
+                        "\r At {:.3f} percent of log likelihood estimation\r".format(
+                            float(i) / len(data_test) * 100
+                        ),
+                        opt.verbosity,
+                        1,
+                        end="",
+                    )
                 nelbo = []
                 for r in range(repeat):
-                    data = [d.expand(opt.ll_batch, *d.size()[1:]).to(opt.device) for d in data]
+                    data = [
+                        d.expand(opt.ll_batch, *d.size()[1:]).to(opt.device)
+                        for d in data
+                    ]
                     losses, _ = decoder(data, True)
                     nelbo.append(losses["NLL"] + losses["KL"])
                 nelbo = torch.cat(nelbo, 0)
@@ -448,10 +553,16 @@ def novelty(opt):
     except InvalidPathError as e:
         raise NoModelError("Aborting testing without a valid model to load.") from e
     except Error as e:
-        warn("{}\n Make sure all preset arguments coincide with the model you are loading.".format(e))
+        warn(
+            "{}\n Make sure all preset arguments coincide with the model you are loading.".format(
+                e
+            )
+        )
 
     # Set device so script works on both GPU and CPU
-    opt.device = torch.device("cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu")
+    opt.device = torch.device(
+        "cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu"
+    )
     vprint("Using device: {}".format(opt.device), opt.verbosity, 1)
 
     word_to_idx, idx_to_word = load_word_index_maps(opt)
@@ -463,8 +574,12 @@ def novelty(opt):
 
     with torch.no_grad():
         # Novelty is inverse TER of a generated sentence compared with the training corpus
-        novelty, full_scores = compute_novelty(get_samples(opt, decoder, idx_to_word, word_to_idx),
-                                               osp.join(opt.data_folder, opt.train_file), opt, idx_to_word)
+        novelty, full_scores = compute_novelty(
+            get_samples(opt, decoder, idx_to_word, word_to_idx),
+            osp.join(opt.data_folder, opt.train_file),
+            opt,
+            idx_to_word,
+        )
     vprint("Novelty: {}".format(novelty), opt.verbosity, 0)
     save_novelties(full_scores)
     return novelty
@@ -478,10 +593,16 @@ def qualitative(opt):
     except InvalidPathError as e:
         raise NoModelError("Aborting testing without a valid model to load.") from e
     except Error as e:
-        warn("{}\n Make sure all preset arguments coincide with the model you are loading.".format(e))
+        warn(
+            "{}\n Make sure all preset arguments coincide with the model you are loading.".format(
+                e
+            )
+        )
 
     # Set device so script works on both GPU and CPU
-    opt.device = torch.device("cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu")
+    opt.device = torch.device(
+        "cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu"
+    )
     vprint("Using device: {}".format(opt.device), opt.verbosity, 1)
 
     # Here we construct all parts of the training ensemble; the model, dataloaders and optimizer
@@ -497,11 +618,13 @@ def qualitative(opt):
 
     with torch.no_grad():
         if opt.qual_file:
-            with open(opt.qual_file, 'r') as f:
-                sentences = f.read().split('\n')
+            with open(opt.qual_file, "r") as f:
+                sentences = f.read().split("\n")
 
             # Convert sentences to index tensors
-            sentences = [[word_to_idx[word] for word in s.strip().split(' ')] for s in sentences]
+            sentences = [
+                [word_to_idx[word] for word in s.strip().split(" ")] for s in sentences
+            ]
             x_len = [len(s) for s in sentences]
             max_len = max(x_len)
             pad_idx = word_to_idx[opt.pad_token]
@@ -517,42 +640,120 @@ def qualitative(opt):
                 sentences = sentences.to(opt.device)
                 break
 
-        if opt.model != 'deterministic':
+        if opt.model != "deterministic":
             # Print some homotopies
             for i in range(sentences.shape[0] - 1):
-                if x_len[i].item() < 2 or x_len[i+1].item() < 2:
+                if x_len[i].item() < 2 or x_len[i + 1].item() < 2:
                     continue
                 homotopy_idx = decoder.homotopies(
-                    sentences[i][:x_len[i].item()].unsqueeze(0), sentences[i+1][:x_len[i+1].item()].unsqueeze(0), 9, torch.empty([10, 1], device=opt.device, dtype=torch.long).fill_(word_to_idx[opt.sos_token]), word_to_idx[opt.eos_token], word_to_idx[opt.pad_token], sample_softmax=opt.sample_softmax)
-                homotopy = "\n".join([" ".join([idx_to_word[s]
-                                                for s in hom if s != word_to_idx[opt.pad_token]]) for hom in homotopy_idx])
-                homotopy_idx = "\n".join([" ".join([str(s)
-                                                    for s in hom if s != word_to_idx[opt.pad_token]]) for hom in homotopy_idx])
-                print("Original:\n {} - {}\n\n".format(" ".join([idx_to_word[s] for s in sentences[i][:x_len[i].item()].tolist()]), " ".join(
-                    [idx_to_word[s] for s in sentences[i+1][:x_len[i+1].item()].tolist()])))
+                    sentences[i][: x_len[i].item()].unsqueeze(0),
+                    sentences[i + 1][: x_len[i + 1].item()].unsqueeze(0),
+                    9,
+                    torch.empty([10, 1], device=opt.device, dtype=torch.long).fill_(
+                        word_to_idx[opt.sos_token]
+                    ),
+                    word_to_idx[opt.eos_token],
+                    word_to_idx[opt.pad_token],
+                    sample_softmax=opt.sample_softmax,
+                )
+                homotopy = "\n".join(
+                    [
+                        " ".join(
+                            [
+                                idx_to_word[s]
+                                for s in hom
+                                if s != word_to_idx[opt.pad_token]
+                            ]
+                        )
+                        for hom in homotopy_idx
+                    ]
+                )
+                homotopy_idx = "\n".join(
+                    [
+                        " ".join(
+                            [str(s) for s in hom if s != word_to_idx[opt.pad_token]]
+                        )
+                        for hom in homotopy_idx
+                    ]
+                )
+                print(
+                    "Original:\n {} - {}\n\n".format(
+                        " ".join(
+                            [
+                                idx_to_word[s]
+                                for s in sentences[i][: x_len[i].item()].tolist()
+                            ]
+                        ),
+                        " ".join(
+                            [
+                                idx_to_word[s]
+                                for s in sentences[i + 1][
+                                    : x_len[i + 1].item()
+                                ].tolist()
+                            ]
+                        ),
+                    )
+                )
                 print("Homotopies:\n {}\n\n".format(homotopy))
                 if opt.ter:
                     print("Novelties:\n")
-                    _ = compute_novelty([homotopy, homotopy_idx], osp.join(
-                        opt.data_folder, opt.train_file), opt, idx_to_word)
+                    _ = compute_novelty(
+                        [homotopy, homotopy_idx],
+                        osp.join(opt.data_folder, opt.train_file),
+                        opt,
+                        idx_to_word,
+                    )
 
             # Print some posterior samples
             for i in range(sentences.shape[0]):
                 if x_len[i].item() < 2:
                     continue
                 pos_samples_idx = decoder.sample_posterior(
-                    sentences[i][:x_len[i].item()].unsqueeze(0), 3, word_to_idx[opt.eos_token], word_to_idx[opt.pad_token], sample_softmax=opt.sample_softmax)
+                    sentences[i][: x_len[i].item()].unsqueeze(0),
+                    3,
+                    word_to_idx[opt.eos_token],
+                    word_to_idx[opt.pad_token],
+                    sample_softmax=opt.sample_softmax,
+                )
                 pos_samples = "\n".join(
-                    [" ".join([idx_to_word[s] for s in sample if s != word_to_idx[opt.pad_token]]) for sample in pos_samples_idx])
+                    [
+                        " ".join(
+                            [
+                                idx_to_word[s]
+                                for s in sample
+                                if s != word_to_idx[opt.pad_token]
+                            ]
+                        )
+                        for sample in pos_samples_idx
+                    ]
+                )
                 pos_samples_idx = "\n".join(
-                    [" ".join([str(s) for s in sample if s != word_to_idx[opt.pad_token]]) for sample in pos_samples_idx])
-                print("Original:\n {} \n\n".format(" ".join([idx_to_word[s]
-                                                             for s in sentences[i][:x_len[i].item()].tolist()])))
+                    [
+                        " ".join(
+                            [str(s) for s in sample if s != word_to_idx[opt.pad_token]]
+                        )
+                        for sample in pos_samples_idx
+                    ]
+                )
+                print(
+                    "Original:\n {} \n\n".format(
+                        " ".join(
+                            [
+                                idx_to_word[s]
+                                for s in sentences[i][: x_len[i].item()].tolist()
+                            ]
+                        )
+                    )
+                )
                 print("Samples:\n {} \n\n".format(pos_samples))
                 if opt.ter:
                     print("Novelties:\n")
-                    _ = compute_novelty([pos_samples, pos_samples_idx],
-                                        osp.join(opt.data_folder, opt.train_file), opt, idx_to_word)
+                    _ = compute_novelty(
+                        [pos_samples, pos_samples_idx],
+                        osp.join(opt.data_folder, opt.train_file),
+                        opt,
+                        idx_to_word,
+                    )
 
             # Print some free posterior samples
             print("Free posterior samples.\n\n")
@@ -560,30 +761,71 @@ def qualitative(opt):
                 if x_len[i].item() < 2:
                     continue
                 pos_samples_idx = decoder.sample_posterior(
-                    sentences[i][:x_len[i].item()].unsqueeze(0), 3, word_to_idx[opt.eos_token], word_to_idx[opt.pad_token], torch.empty([3, 1], device=opt.device, dtype=torch.long).fill_(word_to_idx[opt.sos_token]), "free", sample_softmax=opt.sample_softmax)
+                    sentences[i][: x_len[i].item()].unsqueeze(0),
+                    3,
+                    word_to_idx[opt.eos_token],
+                    word_to_idx[opt.pad_token],
+                    torch.empty([3, 1], device=opt.device, dtype=torch.long).fill_(
+                        word_to_idx[opt.sos_token]
+                    ),
+                    "free",
+                    sample_softmax=opt.sample_softmax,
+                )
                 pos_samples = "\n".join(
-                    [" ".join([idx_to_word[s] for s in sample if s != word_to_idx[opt.pad_token]]) for sample in pos_samples_idx])
+                    [
+                        " ".join(
+                            [
+                                idx_to_word[s]
+                                for s in sample
+                                if s != word_to_idx[opt.pad_token]
+                            ]
+                        )
+                        for sample in pos_samples_idx
+                    ]
+                )
                 pos_samples_idx = "\n".join(
-                    [" ".join([str(s) for s in sample if s != word_to_idx[opt.pad_token]]) for sample in pos_samples_idx])
-                print("Original:\n {} \n\n".format(" ".join([idx_to_word[s]
-                                                             for s in sentences[i][:x_len[i].item()].tolist()])))
+                    [
+                        " ".join(
+                            [str(s) for s in sample if s != word_to_idx[opt.pad_token]]
+                        )
+                        for sample in pos_samples_idx
+                    ]
+                )
+                print(
+                    "Original:\n {} \n\n".format(
+                        " ".join(
+                            [
+                                idx_to_word[s]
+                                for s in sentences[i][: x_len[i].item()].tolist()
+                            ]
+                        )
+                    )
+                )
                 print("Samples:\n {} \n\n".format(pos_samples))
                 if opt.ter:
                     print("Novelties:\n")
-                    _ = compute_novelty([pos_samples, pos_samples_idx],
-                                        osp.join(opt.data_folder, opt.train_file), opt, idx_to_word)
+                    _ = compute_novelty(
+                        [pos_samples, pos_samples_idx],
+                        osp.join(opt.data_folder, opt.train_file),
+                        opt,
+                        idx_to_word,
+                    )
 
         # Print some free prior samples
         print("Free samples:\n")
         if opt.ter:
-            _ = compute_novelty(get_samples(opt, decoder, idx_to_word, word_to_idx),
-                                osp.join(opt.data_folder, opt.train_file), opt, idx_to_word)
+            _ = compute_novelty(
+                get_samples(opt, decoder, idx_to_word, word_to_idx),
+                osp.join(opt.data_folder, opt.train_file),
+                opt,
+                idx_to_word,
+            )
         else:
             print(get_samples(opt, decoder, idx_to_word, word_to_idx)[0])
 
 
 def compute_free_bits_from_stats(stats, opt):
-    return max(opt.bayes_free_bits - stats.val_rec_kl, 0.)
+    return max(opt.bayes_free_bits - stats.val_rec_kl, 0.0)
 
 
 def generate_data(opt):
@@ -594,12 +836,18 @@ def generate_data(opt):
     except InvalidPathError as e:
         raise NoModelError("Aborting generating without a valid model to load.") from e
     except Error as e:
-        warn("{}\n Make sure all preset arguments coincide with the model you are loading.".format(e))
+        warn(
+            "{}\n Make sure all preset arguments coincide with the model you are loading.".format(
+                e
+            )
+        )
 
     opt.N = 0
 
     # Set device so script works on both GPU and CPU
-    opt.device = torch.device("cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu")
+    opt.device = torch.device(
+        "cuda:{}".format(opt.local_rank) if opt.local_rank >= 0 else "cpu"
+    )
     vprint("Using device: {}".format(opt.device), opt.verbosity, 1)
 
     word_to_idx, idx_to_word = load_word_index_maps(opt)
@@ -610,12 +858,12 @@ def generate_data(opt):
     decoder = load_model(opt, decoder)
 
     decoder.eval()
-    for mode in ['train', 'valid', 'test']:
-        if mode == 'train':
+    for mode in ["train", "valid", "test"]:
+        if mode == "train":
             tot_samples = file_len(osp.join(opt.data_folder, opt.train_file))
-        elif mode == 'valid':
+        elif mode == "valid":
             tot_samples = file_len(osp.join(opt.data_folder, opt.val_file))
-        elif mode == 'test':
+        elif mode == "test":
             tot_samples = file_len(osp.join(opt.data_folder, opt.test_file))
 
         samples = ""
@@ -638,7 +886,7 @@ def generate_data(opt):
 
 
 def file_len(fname):
-    with open(fname, 'r') as f:
+    with open(fname, "r") as f:
         for i, l in enumerate(f):
             pass
     return i + 1

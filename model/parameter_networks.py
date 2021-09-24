@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from torch.autograd import Function
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
@@ -71,7 +71,9 @@ class varForward(nn.Module):
 class BowmanEncoder(nn.Module):
     "Bowman style LSTM-encoder of a sentence into a mean and var."
 
-    def __init__(self, in_dim, h_dim, out_dim, l_dim, p, var_mask, posterior, k=0, drop_inp=True):
+    def __init__(
+        self, in_dim, h_dim, out_dim, l_dim, p, var_mask, posterior, k=0, drop_inp=True
+    ):
         super().__init__()
 
         self.p = p
@@ -99,7 +101,11 @@ class BowmanEncoder(nn.Module):
         # x = [B x S x in_dim], x_len = [B]
         # Apply dropout to the input
         if self.drop_inp:
-            shape = torch.Size(x.shape) if self.var_mask else torch.Size([x.shape[0], 1, self.in_dim])
+            shape = (
+                torch.Size(x.shape)
+                if self.var_mask
+                else torch.Size([x.shape[0], 1, self.in_dim])
+            )
             x = self.drop(x, self.p, shape=shape)
 
         # Pack padded if sequences have variable lengths
@@ -122,11 +128,12 @@ class BowmanEncoder(nn.Module):
         if self.posterior == "vmf":
             # The location of the vMF distribution on the unit sphere
             mu = mu / mu.norm(2, dim=-1, keepdim=True)
-            if self.k <= 0.:
+            if self.k <= 0.0:
                 # Use tanh to clamp the var between z_dim / 3 and z_dim * 3
                 # var = F.softplus(var)
-                var = torch.tanh(var) * ((self.out_dim * 3.5 - self.out_dim / 3.5) / 2.) + \
-                    ((self.out_dim * 3.5 + self.out_dim / 3.5) / 2)
+                var = torch.tanh(var) * (
+                    (self.out_dim * 3.5 - self.out_dim / 3.5) / 2.0
+                ) + ((self.out_dim * 3.5 + self.out_dim / 3.5) / 2)
 
                 # Clamp the gradients to make sure tanh does not oversaturate
                 var = self.grad_clamp(var, self.out_dim / 3.45, self.out_dim * 3.45)
@@ -151,13 +158,15 @@ class SoftClampGradients(Function):
 
     @staticmethod
     def forward(ctx, var, lowerbound, upperbound):
-        ctx.save_for_backward(var, var.new_tensor(lowerbound), var.new_tensor(upperbound))
+        ctx.save_for_backward(
+            var, var.new_tensor(lowerbound), var.new_tensor(upperbound)
+        )
         return var
 
     @staticmethod
     def backward(ctx, grad_output):
         var, lowerbound, upperbound = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad_input[(var > upperbound) * (grad_input < 0.)] = 0.
-        grad_input[(var < lowerbound) * (grad_input > 0.)] = 0.
+        grad_input[(var > upperbound) * (grad_input < 0.0)] = 0.0
+        grad_input[(var < lowerbound) * (grad_input > 0.0)] = 0.0
         return grad_input, None, None

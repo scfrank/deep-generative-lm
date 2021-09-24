@@ -11,7 +11,7 @@ from scipy.stats import gaussian_kde
 from pyter import ter
 
 # We include the path of the toplevel package in the system path so we can always use absolute imports within the package.
-toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+toplevel_path = osp.abspath(osp.join(osp.dirname(__file__), ".."))
 if toplevel_path not in sys.path:
     sys.path.insert(1, toplevel_path)
 
@@ -41,14 +41,16 @@ def compute_kernel(x, y):
     y = y.unsqueeze(0)  # (1, y_size, dim)
     tiled_x = x.expand(x_size, y_size, dim)
     tiled_y = y.expand(x_size, y_size, dim)
-    kernel_input = (tiled_x - tiled_y).pow(2).mean(2)/float(dim)
+    kernel_input = (tiled_x - tiled_y).pow(2).mean(2) / float(dim)
     return torch.exp(-kernel_input)  # (x_size, y_size)
 
 
 """------------------------------------------------------------------------------------------------------------------"""
 
 
-def compute_mutual_information(samples, log_p_z, avg_H, avg_KL, method, kde_method, log_q_z=None):
+def compute_mutual_information(
+    samples, log_p_z, avg_H, avg_KL, method, kde_method, log_q_z=None
+):
     """Computes the mutual information given a batch of samples and their LL under the sampling distribution.
 
     If log_q_z is not provided, this method uses kernel density estimation on the provided samples to compute this
@@ -71,29 +73,39 @@ def compute_mutual_information(samples, log_p_z, avg_H, avg_KL, method, kde_meth
 
     marg_KL = (log_q_z - log_p_z).mean()
 
-    if method == 'zhao':  # https://arxiv.org/pdf/1806.06514.pdf (Lagrangian VAE)
+    if method == "zhao":  # https://arxiv.org/pdf/1806.06514.pdf (Lagrangian VAE)
         mi_estimate = (avg_H - log_q_z.mean()).item()
-    elif method == 'hoffman':  # http://approximateinference.org/accepted/HoffmanJohnson2016.pdf (ELBO surgery)
+    elif (
+        method == "hoffman"
+    ):  # http://approximateinference.org/accepted/HoffmanJohnson2016.pdf (ELBO surgery)
         mi_estimate = (avg_KL - marg_KL).item()
     else:
-        raise UnknownArgumentError('MI method {} is unknown. Please choose [zhao, hoffman]'.format(method))
+        raise UnknownArgumentError(
+            "MI method {} is unknown. Please choose [zhao, hoffman]".format(method)
+        )
 
     return mi_estimate, marg_KL.item()
 
 
 def kde_gauss(samples, method):
     """KDE estimation with a Gaussian kernel for a batch of samples. Returns the log probability of each sample."""
-    if method == 'scipy':
+    if method == "scipy":
         # [num, z_dim] -> [z_dim, num]
         samples_cpu = samples.cpu().numpy().transpose()
         kde = gaussian_kde(samples_cpu)
         # [num] with p(samples) under kernels
         return samples.new_tensor(kde.logpdf(samples_cpu))
-    elif method == 'pytorch':
+    elif method == "pytorch":
         # [num]
-        return torch.log(samples.new_tensor(compute_kernel(samples.cpu(), samples.cpu()).mean(dim=1) + 1e-80))
+        return torch.log(
+            samples.new_tensor(
+                compute_kernel(samples.cpu(), samples.cpu()).mean(dim=1) + 1e-80
+            )
+        )
     else:
-        raise UnknownArgumentError('KDE method {} is unknown. Please choose [scipy, pytorch]'.format(method))
+        raise UnknownArgumentError(
+            "KDE method {} is unknown. Please choose [scipy, pytorch]".format(method)
+        )
 
 
 def compute_bleu(pred, data, pad_idx):
@@ -131,7 +143,7 @@ def compute_novelty(sentences, corpus_file, opt, idx_to_word):
     # Prepare sampled sentences and corpus to compare to
     ref = sentences[0].split("\n")
     sentences = [s.split(" ") for s in sentences[1].split("\n")]
-    with open(corpus_file, 'r') as f:
+    with open(corpus_file, "r") as f:
         corpus = [s.rstrip().split(" ") for s in f.readlines()]
 
     # Remove sentences much longer than the sampled sentences length
@@ -145,14 +157,18 @@ def compute_novelty(sentences, corpus_file, opt, idx_to_word):
         mindex = np.argmin(np.array([ter(sen, s) for s in corpus]))
         novelty.append(ter(sen, corpus[mindex]))
         closest.append(" ".join([idx_to_word[int(idx)] for idx in corpus[mindex]]))
-        print("Novelty: {}, Sentence: {}, Closest: {}\n".format(novelty[i], ref[i], closest[i]))
+        print(
+            "Novelty: {}, Sentence: {}, Closest: {}\n".format(
+                novelty[i], ref[i], closest[i]
+            )
+        )
     return sum(novelty) / float(len(novelty)), sorted(zip(novelty, ref, closest))
 
 
 def remove_padding(sentence, pad_idx):
     """Removes the paddings from a sentence"""
     try:
-        return sentence[:sentence.index(pad_idx)]
+        return sentence[: sentence.index(pad_idx)]
     except ValueError:
         return sentence
 
@@ -167,8 +183,8 @@ def compute_active_units(mu, delta):
     Returns:
         int: the number of active dimensions.
     """
-    outer_expectation = torch.mean(mu, 0)**2
-    inner_expectation = torch.mean(mu**2, 0)
+    outer_expectation = torch.mean(mu, 0) ** 2
+    inner_expectation = torch.mean(mu ** 2, 0)
     return torch.sum(inner_expectation - outer_expectation > delta).item()
 
 
@@ -192,7 +208,7 @@ def compute_accuracy(pred, data):
         # Here we have to ignore padding from the computation
         target = data[0][:, 1:]
         pred[data[2][:, 1:] == 0] = -1
-        denom = denom - torch.sum(1. - data[2])
+        denom = denom - torch.sum(1.0 - data[2])
 
     return float(torch.eq(target, pred).sum()) / denom
 
@@ -222,13 +238,29 @@ def get_samples(opt, model, idx_to_word, word_to_idx):
     """Get a number of text samples from the provided model."""
     pad_idx = word_to_idx[opt.pad_token]
     try:
-        samples = model.sample_sequences(torch.full(
-            [opt.num_samples, 1], word_to_idx[opt.sos_token], dtype=torch.int64, device=opt.device),
-            opt.sample_len, word_to_idx[opt.eos_token], pad_idx, opt.sample_softmax)
+        samples = model.sample_sequences(
+            torch.full(
+                [opt.num_samples, 1],
+                word_to_idx[opt.sos_token],
+                dtype=torch.int64,
+                device=opt.device,
+            ),
+            opt.sample_len,
+            word_to_idx[opt.eos_token],
+            pad_idx,
+            opt.sample_softmax,
+        )
     except RuntimeError as e:
         raise RuntimeError("Not enough memory to sample.") from e
 
-    sample_indices = "\n".join([" ".join([str(s) for s in sample if s != pad_idx]) for sample in samples])
-    samples = "\n".join([" ".join([idx_to_word[s] for s in sample if s != pad_idx]) for sample in samples])
+    sample_indices = "\n".join(
+        [" ".join([str(s) for s in sample if s != pad_idx]) for sample in samples]
+    )
+    samples = "\n".join(
+        [
+            " ".join([idx_to_word[s] for s in sample if s != pad_idx])
+            for sample in samples
+        ]
+    )
 
     return samples, sample_indices
